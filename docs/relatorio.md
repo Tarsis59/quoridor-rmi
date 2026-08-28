@@ -106,7 +106,39 @@ As regras implementadas:
 - **Desconexão tolerada**: `RemoteException` no broadcast marca o cliente como desconectado sem derrubar o servidor; se o jogador da vez desconectou, o vigia avança o turno para a partida não travar.
 - **Baixo acoplamento por `EstadoJogo`**: o estado completo é transportado em um único snapshot serializável, o que facilita reconexão e sincronização.
 
-## 7. Testes e validação
+## 7. Interface gráfica (Swing)
+
+O cliente ganhou uma **interface gráfica em Java Swing** (pacote `client.ui`) que mantém o requisito de **RMI puro e ausência de `java.net.Socket`**: a GUI é apenas mais uma implementação da interface local `JogadorUI` (`novoEstado`, `finalizar`, `getEstadoAtual`), alimentada pelo mesmo `ClientCallbackImpl` do modo texto. Nenhuma linha de RMI, engine ou classes `common` foi alterada — o `SemSocketTest` continua verificando a ausência de sockets.
+
+### 7.1 Componentes
+
+| Classe | Responsabilidade |
+|--------|------------------|
+| `GraphicUI` | Implementa `JogadorUI`. Janela (`JFrame`), agrega os painéis, orquestra modo/estado e converte callbacks para a EDT via `SwingUtilities.invokeLater`. |
+| `TabuleiroPanel` | `JPanel` com `paintComponent`: desenha o tabuleiro 9×9 (casas, peões, cercas, coordenadas, destaque de vez) e trata cliques + preview de cerca. |
+| `PainelJogadores` | Lista os 4 jogadores (cor, posição, cercas restantes, badge `VEZ`, realce "você"). |
+| `BarraStatus` | Mensagens de status, dicas e erros. |
+| `DialogoModo` | Diálogo inicial: escolha entre **Manual** e **Automático**. |
+| `Geometria` | Conversão pura pixel ↔ casa/aresta, testável sem abrir janela. |
+| `EstiloUI` | Tema "Moderno Plano" centralizado (cores, fontes, medidas). |
+
+### 7.2 Modos de uso
+
+- **Modo Manual** — o jogador humano age **100% por cliques**: casas destino legais destacadas, barra de ferramentas `Mover`/`Cerca H`/`Cerca V`, preview da cerca em tempo real (verde = válida, vermelho = inválida) e clique direito para alternar a orientação H ↔ V.
+- **Modo Automático (ilustrativo)** — os 4 processos usam o `BotJogador` existente e a janela exibe a partida evoluindo sozinha; demonstra o jogo completo sem intervenção.
+
+O modo é escolhido por `--modo manual|auto` ou, na ausência da flag, por um diálogo na abertura.
+
+### 7.3 Decisões visuais (tema "Moderno Plano")
+
+Paleta *flat* centralizada em `EstiloUI`: fundo `#eef1f6`, topo escuro `#2b3442` com título dourado `#f7c948`, peões vermelho/azul/verde/âmbar, badge de vez dourado e realce azul para o jogador local. Cantos arredondados em casas, peças e painéis — sem dependências externas (apenas `java.desktop` da JDK, mantendo o jar único).
+
+### 7.4 Validação
+
+- **13 novos testes JUnit** (pacote `client.ui`): `GeometriaTest` (pixel ↔ casa/aresta), `TabuleiroPanelTest` (clique → `Posicao`/`Cerca` via eventos sintéticos), `PainelJogadoresTest`, `BarraStatusTest` e `GraphicUITest` (construção e troca de estado sem abrir janela).
+- **Demo automática executada (2026-08-28):** 1 servidor + 4 clientes `--gui --modo auto` jogaram uma partida completa até `[FIM] vencedor=4 (Bot4)`, com a janela exibindo o tabuleiro evoluindo. A captura está em `docs/img/quoridor-gui.png`.
+
+## 8. Testes e validação
 
 ### Unitários (JUnit 5)
 
@@ -127,7 +159,7 @@ Sobe **1 servidor + 4 clientes em processos JVM separados** (`ProcessBuilder`) c
 
 **Resultado da validação (execução real em 2026-08-28):** a partida completa terminou com **vencedor = 4 (Bot4)**, que alcançou a coluna 8, e os 4 clientes confirmaram o estado final via callback.
 
-## 8. Como validar
+## 9. Como validar
 
 ```bash
 mvn clean test          # roda toda a suíte (unitários + sem-socket + e2e)
@@ -144,6 +176,16 @@ java -cp target/classes client.ClientMain --nome Jogador3
 java -cp target/classes client.ClientMain --nome Jogador4
 ```
 
-## 9. Conclusão
+Demo da interface gráfica em modo automático (1 servidor + 4 janelas):
 
-O projeto entrega um Quoridor distribuído completo e funcional em Java RMI puro: engine com regras robustas (incluindo pulo e caminho garantido por BFS), servidor com registry embutido e broadcast via callback, clientes com interface de console e modo bot, e uma suíte de testes que cobre unitário, ausência de sockets e uma partida E2E completa — atendendo integralmente os requisitos da disciplina.
+```bash
+java -cp target/classes server.ServerMain
+java -cp target/classes client.ClientMain --gui --modo auto --nome Bot1
+java -cp target/classes client.ClientMain --gui --modo auto --nome Bot2
+java -cp target/classes client.ClientMain --gui --modo auto --nome Bot3
+java -cp target/classes client.ClientMain --gui --modo auto --nome Bot4
+```
+
+## 10. Conclusão
+
+O projeto entrega um Quoridor distribuído completo e funcional em Java RMI puro: engine com regras robustas (incluindo pulo e caminho garantido por BFS), servidor com registry embutido e broadcast via callback, clientes com interface de console, modo bot e **interface gráfica Swing** (manual por cliques e automática ilustrativa), e uma suíte de testes que cobre unitário, a GUI, ausência de sockets e uma partida E2E completa — atendendo integralmente os requisitos da disciplina.

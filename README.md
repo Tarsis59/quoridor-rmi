@@ -50,6 +50,8 @@ A partida **começa automaticamente** quando o 4º jogador entra.
 | `--host <host>` | cliente | `localhost` | Host do servidor |
 | `--nome <nome>` | cliente | `Jogador` | Nome exibido na partida |
 | `--bot` | cliente | — | Modo automático (IA simples) |
+| `--gui` | cliente | — | Abre a interface gráfica (Swing) |
+| `--modo <manual\|auto>` | cliente | diálogo na abertura | Modo da interface gráfica |
 
 ## Comandos do jogador (modo texto)
 
@@ -71,6 +73,33 @@ java -cp target/classes client.ClientMain --nome Bot1 --bot
 
 Cada bot decide sua jogada automaticamente: avança em direção à própria meta e, periodicamente, tenta colocar cercas para atrapalhar o oponente mais próximo da vitória.
 
+## Interface gráfica (Swing)
+
+O cliente também possui uma **interface gráfica em Java Swing** com visual "Moderno Plano" — tabuleiro 9×9 com casas, peões coloridos, cercas e destaque da vez, painel lateral de jogadores e barra de status. Para abri-la, use a flag `--gui`:
+
+```bash
+java -cp target/classes client.ClientMain --gui --nome Jogador1
+```
+
+### Modo Manual (por cliques)
+
+Quando for a sua vez, as **casas destino legais** são destacadas no tabuleiro; basta clicar para mover o peão. A barra de ferramentas alterna entre **Mover**, **Cerca H** e **Cerca V** — ao mover o mouse sobre o tabuleiro, um **preview** da cerca mostra a aresta candidata (verde = válida, vermelho = inválida), e o **clique direito** alterna a orientação H ↔ V rapidamente. A validação final é sempre do servidor; erros aparecem na barra de status.
+
+### Modo Automático (demonstração)
+
+A janela apenas **exibe** a partida evoluindo sozinha em tempo real, com os 4 processos jogando como bots — ideal para demonstrar o jogo completo sem intervenção:
+
+```bash
+java -cp target/classes client.ClientMain --gui --modo auto --nome Bot1
+java -cp target/classes client.ClientMain --gui --modo auto --nome Bot2
+java -cp target/classes client.ClientMain --gui --modo auto --nome Bot3
+java -cp target/classes client.ClientMain --gui --modo auto --nome Bot4
+```
+
+Se `--modo` não for informado, um diálogo pergunta entre **Manual** e **Automático** na abertura.
+
+![Interface gráfica do Quoridor](docs/img/quoridor-gui.png)
+
 ## Testes
 
 ```bash
@@ -83,6 +112,7 @@ mvn test
 | `PartidaTest` (5) | Ordem de turnos, jogada fora da vez, vitória, movimento inválido, estado inicial (10 cercas e posições corretas) |
 | `SemSocketTest` (1) | Varre `src/main/java` e garante que **nenhum** arquivo usa `java.net.Socket`/`new Socket`/`ServerSocket` |
 | `E2ETest` (1) | Sobe 1 servidor + 4 clientes bot em **processos separados** e joga uma partida completa, verificando que os 4 clientes recebem o estado final via callback |
+| `ui/*` (13) | Geometria (pixel ↔ casa/aresta), cliques do `TabuleiroPanel` (via eventos sintéticos), `PainelJogadores`, `BarraStatus` e `GraphicUI` (construção/estado sem abrir janela) |
 
 ## Estrutura
 
@@ -92,9 +122,11 @@ src/main/java/
 ├── engine/   regras do jogo, puras e sem RMI (Tabuleiro, Partida)
 ├── server/   GameServerImpl (lógica RMI + callbacks), ServerMain (registry embutido)
 └── client/   ClientCallbackImpl, ConsoleUI, BotJogador, ClientMain
+    └── ui/   interface gráfica Swing (GraphicUI, TabuleiroPanel, PainelJogadores, BarraStatus, DialogoModo, Geometria, EstiloUI)
 src/test/java/
 ├── engine/   testes JUnit da engine
-└── e2e/      SemSocketTest + E2ETest
+├── e2e/      SemSocketTest + E2ETest
+└── ui/       testes da interface gráfica
 ```
 
 Veja **`docs/relatorio.md`** para a explicação detalhada da arquitetura, do protocolo RMI e das decisões de design.

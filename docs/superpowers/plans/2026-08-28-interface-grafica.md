@@ -258,7 +258,7 @@ import engine.Tabuleiro;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.awt.MouseEvent;
+import java.awt.event.MouseEvent;
 import java.awt.Point;
 import java.util.ArrayList;
 import java.util.List;

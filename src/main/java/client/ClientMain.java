@@ -1,5 +1,7 @@
 package client;
 
+import client.ui.DialogoModo;
+import client.ui.GraphicUI;
 import common.EstadoJogo;
 import common.GameServer;
 
@@ -14,24 +16,52 @@ public class ClientMain {
         String host = "localhost";
         int porta = 1099;
         boolean bot = false;
+        boolean gui = false;
+        String modo = null; // "manual" | "auto"
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "--nome" -> { if (i + 1 < args.length) nome = args[++i]; }
                 case "--host" -> { if (i + 1 < args.length) host = args[++i]; }
                 case "--porta" -> { if (i + 1 < args.length) porta = Integer.parseInt(args[++i]); }
                 case "--bot" -> bot = true;
+                case "--gui" -> gui = true;
+                case "--modo" -> { if (i + 1 < args.length) modo = args[++i]; }
                 default -> { }
             }
         }
 
         GameServer server = conectar(host, porta);
-        ConsoleUI ui = new ConsoleUI();
+
+        JogadorUI ui;
+        boolean automatico;
+        if (gui) {
+            String modoFinal = modo;
+            if (modoFinal == null) {
+                modoFinal = DialogoModo.perguntar(null);
+                if (modoFinal == null) {
+                    System.out.println("[CLIENTE] Nenhum modo escolhido. Encerrando.");
+                    return;
+                }
+            }
+            GraphicUI graphic = new GraphicUI(modoFinal);
+            graphic.setServidor(server);
+            ui = graphic;
+            automatico = graphic.modoAutomatico();
+        } else {
+            ui = new ConsoleUI();
+            automatico = bot;
+        }
+
         ClientCallbackImpl callback = new ClientCallbackImpl(ui);
         int id = server.registrar(callback, nome);
         ui.setMeuId(id);
         System.out.println("[CLIENTE] Registrado como Jogador " + id + " (" + nome + ").");
 
-        if (bot) {
+        if (gui) {
+            ((GraphicUI) ui).abrir();
+        }
+
+        if (automatico) {
             BotJogador botJogador = new BotJogador(id);
             System.out.println("[BOT " + id + "] Modo automático ativo.");
             while (true) {
@@ -51,10 +81,12 @@ public class ClientMain {
             System.out.println("[BOT " + id + "] FIM vencedor=" + fim.getVencedor()
                     + " nome=" + fim.getNome(fim.getVencedor()));
             System.exit(0);
-        } else {
-            ui.loop(server);
+        } else if (!gui) {
+            ((ConsoleUI) ui).loop(server);
             System.exit(0);
         }
+        // GUI em modo manual: a EDT (Event Dispatch Thread) mantém o app vivo
+        // até a janela ser fechada (EXIT_ON_CLOSE).
     }
 
     private static GameServer conectar(String host, int porta) throws Exception {

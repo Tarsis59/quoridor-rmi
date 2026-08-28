@@ -10,7 +10,7 @@ import common.Posicao;
 import java.rmi.RemoteException;
 import java.util.Scanner;
 
-public class ConsoleUI implements UI {
+public class ConsoleUI implements JogadorUI {
     private volatile EstadoJogo estadoAtual;
     private int meuId = 0;
 

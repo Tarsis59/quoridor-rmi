@@ -97,4 +97,58 @@ class TabuleiroTest {
         t.moverPeao(3, new Posicao(0, 0)); assertTrue(t.chegouAoDestino(3));
         t.moverPeao(4, new Posicao(0, 8)); assertTrue(t.chegouAoDestino(4));
     }
+
+    @Test
+    void cercaSobrepostaDeveSerRejeitada() {
+        Tabuleiro t = new Tabuleiro();
+        Cerca c1 = new Cerca(new Posicao(4, 4), Orientacao.HORIZONTAL);
+        assertTrue(t.podeColocarCerca(c1));
+        t.colocarCerca(c1);
+        assertFalse(t.podeColocarCerca(c1), "mesma cerca de novo");
+        assertFalse(t.podeColocarCerca(new Cerca(new Posicao(4, 3), Orientacao.HORIZONTAL)),
+                "sobrepõe o segmento H(4,4)");
+    }
+
+    @Test
+    void cercaQueCruzaOutraDeveSerRejeitada() {
+        Tabuleiro t = new Tabuleiro();
+        Cerca h = new Cerca(new Posicao(4, 4), Orientacao.HORIZONTAL);
+        assertTrue(t.podeColocarCerca(h));
+        t.colocarCerca(h);
+        assertFalse(t.podeColocarCerca(new Cerca(new Posicao(4, 4), Orientacao.VERTICAL)),
+                "horizontal e vertical na mesma base cruzam");
+    }
+
+    @Test
+    void cercaForaDoTabuleiroDeveSerRejeitada() {
+        Tabuleiro t = new Tabuleiro();
+        assertFalse(t.podeColocarCerca(new Cerca(new Posicao(8, 0), Orientacao.HORIZONTAL)));
+        assertFalse(t.podeColocarCerca(new Cerca(new Posicao(0, 8), Orientacao.VERTICAL)));
+    }
+
+    @Test
+    void cercaQueFechariaOPocketDeveSerRejeitada() {
+        Tabuleiro t = new Tabuleiro();
+        t.moverPeao(1, new Posicao(4, 4));
+        Cerca cima = new Cerca(new Posicao(3, 4), Orientacao.HORIZONTAL);   // fecha saída superior
+        Cerca esquerda = new Cerca(new Posicao(4, 3), Orientacao.VERTICAL); // fecha saída esquerda
+        Cerca direita = new Cerca(new Posicao(4, 5), Orientacao.VERTICAL);  // fecha saída direita
+        Cerca baixo = new Cerca(new Posicao(5, 4), Orientacao.HORIZONTAL);  // fecharia o pocket por baixo
+        assertTrue(t.podeColocarCerca(cima)); t.colocarCerca(cima);
+        assertTrue(t.podeColocarCerca(esquerda)); t.colocarCerca(esquerda);
+        assertTrue(t.podeColocarCerca(direita)); t.colocarCerca(direita);
+        assertTrue(t.temCaminho(1), "J1 ainda escapa por baixo");
+        assertFalse(t.podeColocarCerca(baixo), "fecharia o pocket e isolaria o J1 (último caminho)");
+    }
+
+    @Test
+    void cercaValidaPreservaCaminhoDeTodos() {
+        Tabuleiro t = new Tabuleiro();
+        Cerca c = new Cerca(new Posicao(4, 4), Orientacao.VERTICAL);
+        assertTrue(t.podeColocarCerca(c));
+        t.colocarCerca(c);
+        for (int id = 1; id <= 4; id++) {
+            assertTrue(t.temCaminho(id), "jogador " + id + " deve ter caminho após cerca válida");
+        }
+    }
 }

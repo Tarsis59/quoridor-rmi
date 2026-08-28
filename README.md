@@ -18,20 +18,27 @@ Jogo **Quoridor para 4 jogadores** implementado de forma **distribuída** com **
 ## Como compilar
 
 ```bash
-mvn clean package
+MAVEN_OPTS="-Xmx512m" mvn clean package
 ```
+
+> No PowerShell: `$env:MAVEN_OPTS="-Xmx512m"; mvn clean package`
+> Para compilar **sem rodar os testes** (mais rápido, ideal só para jogar): adicione `-Dmaven.test.skip=true` no fim.
 
 O artefato compilado fica em `target/classes` (sem dependências externas além da JDK).
 
 ## Como rodar
 
-Em um terminal, inicie o **servidor**:
+> 📖 **Guia completo, passo a passo e sem erros, com as duas formas de jogo e a solução de problemas: [COMO_EXECUTAR.md](COMO_EXECUTAR.md).**
+
+O jogo usa **1 servidor + 4 clientes**, cada um em um **terminal próprio**. A partida **começa automaticamente** quando o 4º jogador entra.
+
+### 1. Servidor (Terminal 1)
 
 ```bash
 java -cp target/classes server.ServerMain
 ```
 
-Em outros **4 terminais**, inicie cada **jogador**:
+### 2a. Jogar no terminal (Terminais 2 a 5)
 
 ```bash
 java -cp target/classes client.ClientMain --nome Jogador1
@@ -40,7 +47,18 @@ java -cp target/classes client.ClientMain --nome Jogador3
 java -cp target/classes client.ClientMain --nome Jogador4
 ```
 
-A partida **começa automaticamente** quando o 4º jogador entra.
+Quando for a sua vez, digite `mover cima`, `mover 3 4`, `cerca 4 4 h`, `ajuda` ou `sair` (veja a tabela completa abaixo).
+
+### 2b. Ou jogar na interface gráfica (Terminais 2 a 5)
+
+```bash
+java -cp target/classes client.ClientMain --gui --modo auto --nome Bot1
+java -cp target/classes client.ClientMain --gui --modo auto --nome Bot2
+java -cp target/classes client.ClientMain --gui --modo auto --nome Bot3
+java -cp target/classes client.ClientMain --gui --modo auto --nome Bot4
+```
+
+> Na GUI, use `--modo manual` (ou só `--gui`, que pergunta na abertura) para **jogar por cliques**: clique na casa legal para mover e use a barra de ferramentas para cercas (clique direito alterna H/V).
 
 ### Argumentos opcionais
 

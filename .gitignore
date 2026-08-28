@@ -1,4 +1,5 @@
 target/
+.superpowers/
 *.class
 *.log
 .idea/

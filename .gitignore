@@ -1,0 +1,12 @@
+target/
+*.class
+*.log
+.idea/
+.vscode/
+*.iml
+.env
+Captura*.png
+captura_rgb.png
+captura_jpeg.jpg
+run-deepseek.bat
+Start-Claude-DeepSeek.ps1

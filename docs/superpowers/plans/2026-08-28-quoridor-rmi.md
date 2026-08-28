@@ -643,15 +643,20 @@ class TabuleiroTest {
 
     @Test
     void puloBloqueadoPorParedesDosDoisLados() {
-        Tabuleiro t = new Tabuleiro();
-        t.moverPeao(1, new Posicao(5, 4));
-        t.moverPeao(2, new Posicao(4, 4));
-        assertTrue(t.podeColocarCerca(new Cerca(new Posicao(3, 4), Orientacao.HORIZONTAL)));
-        t.colocarCerca(new Cerca(new Posicao(3, 4), Orientacao.HORIZONTAL));
-        assertTrue(t.podeColocarCerca(new Cerca(new Posicao(4, 3), Orientacao.VERTICAL)));
-        t.colocarCerca(new Cerca(new Posicao(4, 3), Orientacao.VERTICAL));
-        assertTrue(t.podeColocarCerca(new Cerca(new Posicao(4, 4), Orientacao.VERTICAL)));
-        t.colocarCerca(new Cerca(new Posicao(4, 4), Orientacao.VERTICAL));
+        Posicao[] posicoes = {
+            new Posicao(5, 4), // J1
+            new Posicao(4, 4), // J2
+            new Posicao(4, 8), // J3
+            new Posicao(4, 0)  // J4
+        };
+        // Cercas montadas como cenário (aPartirDe), não via podeColocarCerca:
+        // bloquear as 3 opções de pulo do J1 isolaria o J2, e a garantia de caminho
+        // (Task 7) corretamente rejeitaria a colocação da última cerca.
+        Tabuleiro t = Tabuleiro.aPartirDe(posicoes, List.of(
+            new Cerca(new Posicao(3, 4), Orientacao.HORIZONTAL),
+            new Cerca(new Posicao(4, 3), Orientacao.VERTICAL),
+            new Cerca(new Posicao(4, 4), Orientacao.VERTICAL)
+        ));
         List<Posicao> validos = t.movimentosValidos(1);
         assertFalse(validos.contains(new Posicao(4, 3)), "lateral esquerda bloqueada");
         assertFalse(validos.contains(new Posicao(4, 5)), "lateral direita bloqueada");

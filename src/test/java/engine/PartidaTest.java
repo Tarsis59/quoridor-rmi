@@ -78,6 +78,17 @@ class PartidaTest {
     }
 
     @Test
+    void cercaColocadaRegistraODono() throws Exception {
+        Partida p = new Partida();
+        p.iniciar();
+        p.colocarCerca(1, new common.Cerca(new Posicao(0, 0), common.Orientacao.HORIZONTAL));
+        EstadoJogo e = p.gerarEstado();
+        assertEquals(1, e.getCercas().size());
+        assertEquals(1, e.getDonoCerca(0));
+        assertEquals(9, e.getCercasRestantes(1));
+    }
+
+    @Test
     void estadoInicialTemQuatroJogadoresComDezCercas() {
         Partida p = new Partida();
         EstadoJogo e = p.gerarEstado();

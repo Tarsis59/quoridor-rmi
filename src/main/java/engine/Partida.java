@@ -16,6 +16,7 @@ public class Partida {
     private final String[] nomes = new String[NUM_JOGADORES];
     private final int[] cercasRestantes = new int[NUM_JOGADORES];
     private final List<Cerca> cercasColocadas = new ArrayList<>();
+    private final List<Integer> donosCercas = new ArrayList<>();
     private int jogadorDaVez = 1;
     private EstadoJogo.Status status = EstadoJogo.Status.AGUARDANDO;
     private int vencedor = 0;
@@ -70,6 +71,7 @@ public class Partida {
         }
         tabuleiro.colocarCerca(cerca);
         cercasColocadas.add(cerca);
+        donosCercas.add(idJogador);
         cercasRestantes[idJogador - 1]--;
         avancarTurno();
     }
@@ -81,8 +83,8 @@ public class Partida {
     public synchronized EstadoJogo gerarEstado() {
         Posicao[] pos = new Posicao[NUM_JOGADORES];
         for (int i = 0; i < NUM_JOGADORES; i++) pos[i] = tabuleiro.getPosicao(i + 1);
-        return new EstadoJogo(pos, new ArrayList<>(cercasColocadas), cercasRestantes.clone(),
-                jogadorDaVez, status, vencedor, nomes.clone());
+        return new EstadoJogo(pos, new ArrayList<>(cercasColocadas), donosCercas.stream().mapToInt(Integer::intValue).toArray(),
+                cercasRestantes.clone(), jogadorDaVez, status, vencedor, nomes.clone());
     }
 
     public synchronized EstadoJogo.Status getStatus() { return status; }

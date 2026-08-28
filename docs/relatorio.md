@@ -133,10 +133,12 @@ O modo é escolhido por `--modo manual|auto` ou, na ausência da flag, por um di
 
 Paleta *flat* centralizada em `EstiloUI`: fundo `#eef1f6`, topo escuro `#2b3442` com título dourado `#f7c948`, peões vermelho/azul/verde/âmbar, badge de vez dourado e realce azul para o jogador local. Cantos arredondados em casas, peças e painéis — sem dependências externas (apenas `java.desktop` da JDK, mantendo o jar único).
 
+Para facilitar a identificação visual, cada **cerca é pintada com a cor do jogador que a colocou** (a autoria de cada cerca é carregada no próprio `EstadoJogo`, numa lista paralela de donos preenchida pelo `Partida`), e cada linha do painel lateral de jogadores tem uma **barra vertical na cor do respectivo jogador**.
+
 ### 7.4 Validação
 
 - **13 novos testes JUnit** (pacote `client.ui`): `GeometriaTest` (pixel ↔ casa/aresta), `TabuleiroPanelTest` (clique → `Posicao`/`Cerca` via eventos sintéticos), `PainelJogadoresTest`, `BarraStatusTest` e `GraphicUITest` (construção e troca de estado sem abrir janela).
-- **Demo automática executada (2026-08-28):** 1 servidor + 4 clientes `--gui --modo auto` jogaram uma partida completa até `[FIM] vencedor=4 (Bot4)`, com a janela exibindo o tabuleiro evoluindo. A captura está em `docs/img/quoridor-gui.png`.
+- **Demo automática executada (2026-08-28):** 1 servidor + 4 clientes `--gui --modo auto` jogaram uma partida completa até `[FIM] vencedor=4 (Bot4)`, com a janela exibindo o tabuleiro evoluindo em ~1 jogada/2s (partida de ~82s), tempo suficiente para acompanhar cada jogada e cada cerca colorida. A captura está em `docs/img/quoridor-gui.png`.
 
 ## 8. Testes e validação
 

@@ -75,7 +75,7 @@ Cada bot decide sua jogada automaticamente: avança em direção à própria met
 
 ## Interface gráfica (Swing)
 
-O cliente também possui uma **interface gráfica em Java Swing** com visual "Moderno Plano" — tabuleiro 9×9 com casas, peões coloridos, cercas e destaque da vez, painel lateral de jogadores e barra de status. Para abri-la, use a flag `--gui`:
+O cliente também possui uma **interface gráfica em Java Swing** com visual "Moderno Plano" — tabuleiro 9×9 com casas, peões coloridos, cercas e destaque da vez, painel lateral de jogadores e barra de status. As **cercas são coloridas pela cor do jogador que as colocou** e cada linha do painel lateral tem uma **barra na cor do jogador**, para identificar rapidamente quem montou cada barreira e quem é quem. Para abri-la, use a flag `--gui`:
 
 ```bash
 java -cp target/classes client.ClientMain --gui --nome Jogador1
@@ -87,7 +87,7 @@ Quando for a sua vez, as **casas destino legais** são destacadas no tabuleiro; 
 
 ### Modo Automático (demonstração)
 
-A janela apenas **exibe** a partida evoluindo sozinha em tempo real, com os 4 processos jogando como bots — ideal para demonstrar o jogo completo sem intervenção:
+A janela apenas **exibe** a partida evoluindo sozinha em tempo real, com os 4 processos jogando como bots em um ritmo lento (~1 jogada/2s, partida de ~1 min) — ideal para demonstrar o jogo completo sem intervenção:
 
 ```bash
 java -cp target/classes client.ClientMain --gui --modo auto --nome Bot1

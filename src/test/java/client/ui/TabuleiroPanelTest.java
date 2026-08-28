@@ -34,7 +34,7 @@ class TabuleiroPanelTest {
 
     private EstadoJogo estadoJ1() {
         Posicao[] pos = { new Posicao(8, 4), new Posicao(0, 4), new Posicao(4, 8), new Posicao(4, 0) };
-        return new EstadoJogo(pos, List.of(), new int[]{10, 10, 10, 10},
+        return new EstadoJogo(pos, List.of(), new int[0], new int[]{10, 10, 10, 10},
                 1, EstadoJogo.Status.EM_ANDAMENTO, 0, new String[]{"Ana", "Bob", "Cid", "Duda"});
     }
 

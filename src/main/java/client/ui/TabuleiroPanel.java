@@ -152,8 +152,13 @@ public class TabuleiroPanel extends JPanel {
 
     private void desenharCercas(Graphics2D g) {
         if (estado == null) return;
-        g.setColor(EstiloUI.CERCA);
-        for (Cerca c : estado.getCercas()) desenharParede(g, c);
+        int[] donos = estado.getDonosCercas();
+        var cercas = estado.getCercas();
+        for (int i = 0; i < cercas.size(); i++) {
+            int dono = donos != null && i < donos.length ? donos[i] : 0;
+            g.setColor(dono >= 1 && dono <= 4 ? EstiloUI.COR_PEAO[dono - 1] : EstiloUI.CERCA);
+            desenharParede(g, cercas.get(i));
+        }
     }
 
     private void desenharPreview(Graphics2D g) {

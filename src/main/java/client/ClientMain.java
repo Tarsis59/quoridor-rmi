@@ -10,6 +10,12 @@ import java.rmi.registry.Registry;
 
 public class ClientMain {
 
+    /** Batida de ritmo no modo automático com GUI: cada bot checa o estado ~1x a cada 2s. */
+    private static final long ATRASO_AUTO_MS = 2000;
+    /** Pausa de quem joga (3x a batida): dá janela para os outros 3 jogadores agirem
+     *  e o jogo anda em ~1 jogada/2s até alguém vencer (~1 min no total). */
+    private static final long ATRASO_MOVER_MS = 6000;
+
     public static void main(String[] args) throws Exception {
         System.setProperty("java.rmi.server.hostname", "localhost");
         String nome = "Jogador";
@@ -71,9 +77,18 @@ public class ClientMain {
                     continue;
                 }
                 if (e.getStatus() == EstadoJogo.Status.FINALIZADO) break;
+                if (gui) {
+                    Thread.sleep(ATRASO_AUTO_MS);
+                    e = ui.getEstadoAtual();
+                    if (e == null) continue;
+                    if (e.getStatus() == EstadoJogo.Status.FINALIZADO) break;
+                }
                 if (e.getJogadorDaVez() == id) {
                     botJogador.executarJogada(server, e);
-                } else {
+                    // Pausa de quem joga: dá aos outros 3 uma janela de ~2s cada
+                    // para agir, mantendo o ritmo uniforme de ~1 jogada/2s.
+                    if (gui) Thread.sleep(ATRASO_MOVER_MS);
+                } else if (!gui) {
                     Thread.sleep(100);
                 }
             }

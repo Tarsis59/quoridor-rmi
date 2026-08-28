@@ -37,7 +37,7 @@ public class PainelJogadores extends JPanel {
 
     private JPanel criarLinha(int id) {
         JPanel linha = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
-        linha.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+        linha.setBorder(BorderFactory.createMatteBorder(0, 6, 0, 0, EstiloUI.COR_PEAO[id - 1]));
 
         JPanel dot = new JPanel();
         dot.setPreferredSize(new Dimension(14, 14));
@@ -74,9 +74,11 @@ public class PainelJogadores extends JPanel {
             linha.setBackground(vez ? EstiloUI.BADGE_VEZ_FUNDO
                     : voce ? EstiloUI.VOCE_FUNDO : EstiloUI.FUNDO_JANELA);
             linha.setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createLineBorder(vez ? EstiloUI.BADGE_VEZ_BORDA
-                            : voce ? EstiloUI.VOCE_BORDA : Color.WHITE),
-                    BorderFactory.createEmptyBorder(5, 7, 5, 7)));
+                    BorderFactory.createMatteBorder(0, 6, 0, 0, EstiloUI.COR_PEAO[id - 1]),
+                    BorderFactory.createCompoundBorder(
+                            BorderFactory.createLineBorder(vez ? EstiloUI.BADGE_VEZ_BORDA
+                                    : voce ? EstiloUI.VOCE_BORDA : Color.WHITE),
+                            BorderFactory.createEmptyBorder(5, 7, 5, 7))));
             Posicao p = e.getPosicao(id);
             metadados.get(id - 1).setText("(" + p.linha() + "," + p.coluna() + ") · "
                     + e.getCercasRestantes(id) + " cercas");

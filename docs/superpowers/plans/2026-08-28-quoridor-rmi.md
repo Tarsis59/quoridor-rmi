@@ -884,8 +884,9 @@ class PartidaTest {
             Tabuleiro t = Tabuleiro.aPartirDe(p.gerarEstado().getPosicoes(), p.gerarEstado().getCercas());
             List<Posicao> validos = t.movimentosValidos(outro);
             assertTrue(!validos.isEmpty(), "Jogador " + outro + " deveria ter movimento");
+            int id = outro; // effectively final p/ uso no lambda
             Posicao escolha = validos.stream()
-                    .max(Comparator.comparingInt(pos -> t.distanciaMinimaAteAlvo(outro, pos)))
+                    .max(Comparator.comparingInt(pos -> t.distanciaMinimaAteAlvo(id, pos)))
                     .orElseThrow();
             p.mover(outro, escolha);
         }

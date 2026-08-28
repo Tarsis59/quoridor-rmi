@@ -11,3 +11,5 @@ captura_rgb.png
 captura_jpeg.jpg
 run-deepseek.bat
 Start-Claude-DeepSeek.ps1
+
+.claude/

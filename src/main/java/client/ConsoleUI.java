@@ -6,106 +6,155 @@ import common.GameServer;
 import common.JogadaInvalidaException;
 import common.Orientacao;
 import common.Posicao;
+import common.Sessao;
+import engine.Tabuleiro;
 
 import java.rmi.RemoteException;
+import java.util.List;
+import java.util.Locale;
 import java.util.Scanner;
+import java.util.stream.Collectors;
 
+/** Interface orientada a caracteres (terminal). */
 public class ConsoleUI implements JogadorUI {
-    private volatile EstadoJogo estadoAtual;
-    private int meuId = 0;
+    private final CaixaEstado caixa = new CaixaEstado();
+    private volatile Sessao sessao;
+    private volatile int meuId = 0;
 
     @Override
-    public synchronized void novoEstado(EstadoJogo estado) {
-        this.estadoAtual = estado;
+    public void novoEstado(EstadoJogo estado) {
+        caixa.publicar(estado);
         imprimirEstado(estado);
     }
 
     @Override
     public synchronized void finalizar(int idVencedor) {
+        EstadoJogo e = caixa.atual();
         System.out.println("=== FIM DE JOGO ===");
-        EstadoJogo e = estadoAtual;
-        System.out.println("O vencedor é o Jogador " + idVencedor
-                + " (" + (e == null ? "Jogador " + idVencedor : e.getNome(idVencedor)) + ").");
+        if (idVencedor == 0) {
+            System.out.println("Partida encerrada sem vencedor (todos saíram).");
+        } else {
+            System.out.println("O vencedor é o Jogador " + idVencedor
+                    + " (" + (e == null ? "Jogador " + idVencedor : e.getNome(idVencedor)) + ")."
+                    + (idVencedor == meuId ? " Parabéns, você venceu!" : ""));
+        }
     }
 
-    public synchronized EstadoJogo getEstadoAtual() { return estadoAtual; }
+    @Override
+    public EstadoJogo getEstadoAtual() { return caixa.atual(); }
 
-    public void setMeuId(int id) { this.meuId = id; }
+    @Override
+    public EstadoJogo aguardarEstadoDiferenteDe(EstadoJogo anterior, long prazoMs) throws InterruptedException {
+        return caixa.aguardarDiferenteDe(anterior, prazoMs);
+    }
 
+    @Override
+    public void setSessao(Sessao sessao) {
+        this.sessao = sessao;
+        this.meuId = sessao.idJogador();
+    }
+
+    @SuppressWarnings("resource") // Scanner sobre System.in: não deve ser fechado.
     public void loop(GameServer server) {
         Scanner scanner = new Scanner(System.in);
-        System.out.println("Bem-vindo ao Quoridor Distribuído! Você é o Jogador " + meuId + ".");
+        System.out.println("Bem-vindo ao Quoridor Distribuído! Você é o Jogador " + meuId
+                + " (meta: " + descreverMeta(meuId) + ").");
         imprimirAjuda();
-        while (true) {
-            EstadoJogo e = estadoAtual;
-            if (e == null) {
-                System.out.println("[CLIENTE] Aguardando o início da partida (precisa de 4 jogadores)...");
-                dormir(500);
-                continue;
-            }
-            if (e.getStatus() == EstadoJogo.Status.FINALIZADO) {
-                System.out.println("=== FIM DE JOGO ===");
-                System.out.println("O vencedor é o Jogador " + e.getVencedor()
-                        + " (" + e.getNome(e.getVencedor()) + ").");
-                break;
-            }
-            imprimirEstado(e);
-            if (e.getJogadorDaVez() != meuId) {
-                System.out.println("[CLIENTE] Vez do Jogador " + e.getJogadorDaVez() + ". Aguardando...");
-                dormir(400);
-                continue;
-            }
-            System.out.print("Sua vez (Jogador " + meuId + "). Comando: ");
-            if (!scanner.hasNextLine()) break;
-            String linha = scanner.nextLine().trim().toLowerCase();
-            if (linha.isEmpty()) continue;
-            if (linha.equals("sair")) break;
-            if (linha.equals("ajuda")) { imprimirAjuda(); continue; }
-            try {
-                if (linha.startsWith("mover")) {
-                    Posicao destino = interpretarDestino(linha, e);
-                    if (destino == null) {
-                        System.out.println("Uso: mover cima|baixo|esquerda|direita  ou  mover <linha> <coluna>");
-                        continue;
+        boolean avisouEspera = false;
+        EstadoJogo anunciado = null;
+        try {
+            while (true) {
+                EstadoJogo e = caixa.atual();
+                if (e == null || e.getStatus() == EstadoJogo.Status.AGUARDANDO) {
+                    if (!avisouEspera) {
+                        System.out.println("[CLIENTE] Aguardando o início da partida (precisa de 4 jogadores)...");
+                        avisouEspera = true;
                     }
-                    server.mover(meuId, destino);
-                } else if (linha.startsWith("cerca")) {
-                    Cerca cerca = interpretarCerca(linha);
-                    if (cerca == null) {
-                        System.out.println("Uso: cerca <linha> <coluna> <h|v>   (linha/coluna de 0 a 7)");
-                        continue;
-                    }
-                    server.colocarCerca(meuId, cerca);
-                } else {
-                    System.out.println("Comando desconhecido. Use ajuda para ver os comandos.");
+                    caixa.aguardarDiferenteDe(e, 1000);
+                    continue;
                 }
-            } catch (JogadaInvalidaException ex) {
-                System.out.println("[ERRO DE JOGADA] " + ex.getMessage());
-            } catch (RemoteException ex) {
-                System.out.println("[ERRO DE REDE] " + ex.getMessage());
-                break;
+                if (e.getStatus() == EstadoJogo.Status.FINALIZADO) break;
+                if (e.getJogadorDaVez() != meuId) {
+                    if (e != anunciado) {
+                        System.out.println("[CLIENTE] Vez do Jogador " + e.getJogadorDaVez()
+                                + " (" + e.getNome(e.getJogadorDaVez()) + "). Aguardando...");
+                        anunciado = e;
+                    }
+                    caixa.aguardarDiferenteDe(e, 1000);
+                    continue;
+                }
+                Tabuleiro tabuleiro = Tabuleiro.aPartirDe(e.getPosicoes(), e.getCercas());
+                if (e != anunciado) {
+                    System.out.println("Movimentos válidos: " + formatar(tabuleiro.movimentosValidos(meuId))
+                            + " | Cercas restantes: " + e.getCercasRestantes(meuId));
+                    anunciado = e;
+                }
+                System.out.print("Sua vez (Jogador " + meuId + "). Comando: ");
+                if (!scanner.hasNextLine()) break;
+                String linha = scanner.nextLine().trim().toLowerCase(Locale.ROOT);
+                if (linha.isEmpty()) continue;
+                if (linha.equals("sair")) break;
+                if (linha.equals("ajuda")) { imprimirAjuda(); continue; }
+                if (linha.equals("tabuleiro")) { imprimirEstado(e); continue; }
+                executarComando(server, linha, e, tabuleiro);
             }
+        } catch (RemoteException ex) {
+            System.out.println("[ERRO DE REDE] Conexão com o servidor perdida: " + ClientMain.causaRaiz(ex));
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
         }
-        scanner.close();
     }
 
-    private Posicao interpretarDestino(String linha, EstadoJogo e) {
+    private void executarComando(GameServer server, String linha, EstadoJogo e, Tabuleiro tabuleiro)
+            throws RemoteException {
+        try {
+            if (linha.startsWith("mover") || linha.startsWith("m ")) {
+                Posicao destino = interpretarDestino(linha, e, tabuleiro);
+                if (destino == null) {
+                    System.out.println("Uso: mover cima|baixo|esquerda|direita  ou  mover <linha> <coluna>");
+                    return;
+                }
+                server.mover(sessao, destino);
+            } else if (linha.startsWith("cerca") || linha.startsWith("c ")) {
+                Cerca cerca = interpretarCerca(linha);
+                if (cerca == null) {
+                    System.out.println("Uso: cerca <linha> <coluna> <h|v>   (linha e coluna de 0 a 7)");
+                    return;
+                }
+                server.colocarCerca(sessao, cerca);
+            } else {
+                System.out.println("Comando desconhecido. Digite ajuda para ver os comandos.");
+            }
+        } catch (JogadaInvalidaException ex) {
+            System.out.println("[JOGADA INVÁLIDA] " + ex.getMessage());
+        }
+    }
+
+    /**
+     * Direção: vai para a casa vizinha; se ela estiver ocupada por um peão e o pulo reto for
+     * legal, pula. Pulos diagonais são feitos informando a casa: "mover linha coluna".
+     */
+    Posicao interpretarDestino(String linha, EstadoJogo e, Tabuleiro tabuleiro) {
         String[] partes = linha.split("\\s+");
         Posicao atual = e.getPosicao(meuId);
         if (partes.length == 2) {
-            return switch (partes[1]) {
-                case "cima" -> new Posicao(atual.linha() - 1, atual.coluna());
-                case "baixo" -> new Posicao(atual.linha() + 1, atual.coluna());
-                case "esquerda" -> new Posicao(atual.linha(), atual.coluna() - 1);
-                case "direita" -> new Posicao(atual.linha(), atual.coluna() + 1);
+            int[] d = switch (partes[1]) {
+                case "cima", "c", "w" -> new int[]{-1, 0};
+                case "baixo", "b", "s" -> new int[]{1, 0};
+                case "esquerda", "e", "a" -> new int[]{0, -1};
+                case "direita", "d" -> new int[]{0, 1};
                 default -> null;
             };
+            if (d == null) return null;
+            Posicao passo = new Posicao(atual.linha() + d[0], atual.coluna() + d[1]);
+            Posicao pulo = new Posicao(atual.linha() + 2 * d[0], atual.coluna() + 2 * d[1]);
+            List<Posicao> validos = tabuleiro.movimentosValidos(meuId);
+            if (!validos.contains(passo) && validos.contains(pulo)) return pulo;
+            return passo;
         }
         if (partes.length == 3) {
             try {
-                int l = Integer.parseInt(partes[1]);
-                int c = Integer.parseInt(partes[2]);
-                return new Posicao(l, c);
+                return new Posicao(Integer.parseInt(partes[1]), Integer.parseInt(partes[2]));
             } catch (NumberFormatException ex) {
                 return null;
             }
@@ -113,24 +162,43 @@ public class ConsoleUI implements JogadorUI {
         return null;
     }
 
-    private Cerca interpretarCerca(String linha) {
-        String[] partes = linha.split("\\s+");
+    static Cerca interpretarCerca(String linha) {
+        String[] partes = linha.trim().toLowerCase(Locale.ROOT).split("\\s+");
         if (partes.length != 4) return null;
+        Orientacao o = switch (partes[3]) {
+            case "h", "horizontal" -> Orientacao.HORIZONTAL;
+            case "v", "vertical" -> Orientacao.VERTICAL;
+            default -> null;
+        };
+        if (o == null) return null;
         try {
-            int l = Integer.parseInt(partes[1]);
-            int c = Integer.parseInt(partes[2]);
-            Orientacao o = partes[3].startsWith("h") ? Orientacao.HORIZONTAL : Orientacao.VERTICAL;
-            return new Cerca(new Posicao(l, c), o);
+            return new Cerca(new Posicao(Integer.parseInt(partes[1]), Integer.parseInt(partes[2])), o);
         } catch (NumberFormatException ex) {
             return null;
         }
+    }
+
+    private static String formatar(List<Posicao> posicoes) {
+        if (posicoes.isEmpty()) return "(nenhum — coloque uma cerca)";
+        return posicoes.stream().map(p -> "(" + p.linha() + "," + p.coluna() + ")")
+                .collect(Collectors.joining(" "));
+    }
+
+    private static String descreverMeta(int id) {
+        return switch (id) {
+            case 1 -> "chegar à linha 0, no topo";
+            case 2 -> "chegar à linha 8, embaixo";
+            case 3 -> "chegar à coluna 0, à esquerda";
+            case 4 -> "chegar à coluna 8, à direita";
+            default -> "?";
+        };
     }
 
     public synchronized void imprimirEstado(EstadoJogo e) {
         StringBuilder sb = new StringBuilder();
         sb.append("\n--- TABULEIRO 9x9 ---\n");
         sb.append("   ");
-        for (int c = 0; c < 9; c++) sb.append("  ").append(c).append(" ");
+        for (int c = 0; c < 9; c++) sb.append(" ").append(c).append("  ");
         sb.append("\n");
         boolean[][] mapH = new boolean[8][9];
         boolean[][] mapV = new boolean[9][8];
@@ -155,22 +223,30 @@ public class ConsoleUI implements JogadorUI {
             if (r < 8) {
                 sb.append("   ");
                 for (int c = 0; c < 9; c++) {
-                    sb.append(mapH[r][c] ? "---" : "   ");
-                    if (c < 8) sb.append("+");
+                    sb.append(mapH[r][c] ? "===" : "   ");
+                    if (c < 8) sb.append(" ");
                 }
                 sb.append("\n");
             }
         }
         sb.append("\n");
+        if (e.getStatus() == EstadoJogo.Status.AGUARDANDO) {
+            sb.append("Aguardando jogadores: ").append(e.getRegistrados()).append("/4\n");
+        }
         for (int i = 1; i <= 4; i++) {
             Posicao p = e.getPosicao(i);
             sb.append("J").append(i).append(" ").append(e.getNome(i))
               .append(" em (").append(p.linha()).append(",").append(p.coluna()).append(")")
               .append(" | Cercas: ").append(e.getCercasRestantes(i))
-              .append(i == e.getJogadorDaVez() ? "  << VEZ" : "").append("\n");
+              .append(e.isAtivo(i) ? "" : " | DESCONECTADO")
+              .append(i == meuId ? " (você)" : "")
+              .append(e.getStatus() == EstadoJogo.Status.EM_ANDAMENTO && i == e.getJogadorDaVez()
+                      ? "  << VEZ" : "")
+              .append("\n");
         }
-        if (e.getStatus() == EstadoJogo.Status.FINALIZADO) {
-            sb.append("VENCEDOR: Jogador ").append(e.getVencedor()).append("\n");
+        if (e.getStatus() == EstadoJogo.Status.FINALIZADO && e.getVencedor() > 0) {
+            sb.append("VENCEDOR: Jogador ").append(e.getVencedor())
+              .append(" (").append(e.getNome(e.getVencedor())).append(")\n");
         }
         System.out.print(sb);
     }
@@ -185,17 +261,11 @@ public class ConsoleUI implements JogadorUI {
 
     private void imprimirAjuda() {
         System.out.println("Comandos:");
-        System.out.println("  mover cima|baixo|esquerda|direita");
-        System.out.println("  mover <linha> <coluna>");
-        System.out.println("  cerca <linha> <coluna> <h|v>   (cerca horizontal ou vertical)");
-        System.out.println("  ajuda | sair");
-    }
-
-    private void dormir(long ms) {
-        try {
-            Thread.sleep(ms);
-        } catch (InterruptedException ignored) {
-            Thread.currentThread().interrupt();
-        }
+        System.out.println("  mover cima|baixo|esquerda|direita   (pula o peão à frente se possível)");
+        System.out.println("  mover <linha> <coluna>              (ex.: mover 7 4 — use para pulos diagonais)");
+        System.out.println("  cerca <linha> <coluna> <h|v>        (base de 0 a 7; cada jogador tem 5 cercas)");
+        System.out.println("      h: cerca abaixo das casas (l,c) e (l,c+1)");
+        System.out.println("      v: cerca à direita das casas (l,c) e (l+1,c)");
+        System.out.println("  tabuleiro | ajuda | sair");
     }
 }

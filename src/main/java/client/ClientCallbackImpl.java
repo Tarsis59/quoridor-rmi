@@ -30,4 +30,9 @@ public class ClientCallbackImpl extends UnicastRemoteObject implements ClientCal
     public void aoFinalizarJogo(int idVencedor) throws RemoteException {
         ui.finalizar(idVencedor);
     }
+
+    @Override
+    public void ping() {
+        // Responder já basta: prova ao servidor que este processo continua vivo.
+    }
 }

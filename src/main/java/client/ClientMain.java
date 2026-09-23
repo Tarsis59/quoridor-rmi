@@ -4,22 +4,22 @@ import client.ui.DialogoModo;
 import client.ui.GraphicUI;
 import common.EstadoJogo;
 import common.GameServer;
+import common.JogadaInvalidaException;
+import common.Sessao;
 
+import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 
 public class ClientMain {
 
-    /** Batida de ritmo no modo automático com GUI: cada bot checa o estado ~1x a cada 2s. */
-    private static final long ATRASO_AUTO_MS = 2000;
-    /** Pausa de quem joga (3x a batida): dá janela para os outros 3 jogadores agirem
-     *  e o jogo anda em ~1 jogada/2s até alguém vencer (~1 min no total). */
-    private static final long ATRASO_MOVER_MS = 6000;
+    /** No modo automático com GUI, pausa antes de cada jogada do bot para dar para acompanhar. */
+    private static final long ATRASO_JOGADA_GUI_MS = 1500;
 
     public static void main(String[] args) throws Exception {
-        System.setProperty("java.rmi.server.hostname", "localhost");
         String nome = "Jogador";
         String host = "localhost";
+        String hostnameLocal = "localhost";
         int porta = 1099;
         boolean bot = false;
         boolean gui = false;
@@ -28,13 +28,16 @@ public class ClientMain {
             switch (args[i]) {
                 case "--nome" -> { if (i + 1 < args.length) nome = args[++i]; }
                 case "--host" -> { if (i + 1 < args.length) host = args[++i]; }
+                case "--hostname" -> { if (i + 1 < args.length) hostnameLocal = args[++i]; }
                 case "--porta" -> { if (i + 1 < args.length) porta = Integer.parseInt(args[++i]); }
                 case "--bot" -> bot = true;
                 case "--gui" -> gui = true;
                 case "--modo" -> { if (i + 1 < args.length) modo = args[++i]; }
-                default -> { }
+                default -> System.out.println("[CLIENTE] Argumento ignorado: " + args[i]);
             }
         }
+        // Endereço em que o servidor alcança o callback deste cliente (IP da máquina, em rede).
+        System.setProperty("java.rmi.server.hostname", hostnameLocal);
 
         GameServer server = conectar(host, porta);
 
@@ -46,7 +49,7 @@ public class ClientMain {
                 modoFinal = DialogoModo.perguntar(null);
                 if (modoFinal == null) {
                     System.out.println("[CLIENTE] Nenhum modo escolhido. Encerrando.");
-                    return;
+                    System.exit(0);
                 }
             }
             GraphicUI graphic = new GraphicUI(modoFinal);
@@ -59,8 +62,16 @@ public class ClientMain {
         }
 
         ClientCallbackImpl callback = new ClientCallbackImpl(ui);
-        int id = server.registrar(callback, nome);
-        ui.setMeuId(id);
+        Sessao sessao;
+        try {
+            sessao = server.registrar(callback, nome);
+        } catch (RemoteException e) {
+            System.out.println("[CLIENTE] Não foi possível entrar na partida: " + causaRaiz(e));
+            System.exit(1);
+            return;
+        }
+        ui.setSessao(sessao);
+        int id = sessao.idJogador();
         System.out.println("[CLIENTE] Registrado como Jogador " + id + " (" + nome + ").");
 
         if (gui) {
@@ -68,40 +79,61 @@ public class ClientMain {
         }
 
         if (automatico) {
-            BotJogador botJogador = new BotJogador(id);
-            System.out.println("[BOT " + id + "] Modo automático ativo.");
-            while (true) {
-                EstadoJogo e = ui.getEstadoAtual();
-                if (e == null) {
-                    Thread.sleep(200);
-                    continue;
-                }
-                if (e.getStatus() == EstadoJogo.Status.FINALIZADO) break;
-                if (gui) {
-                    Thread.sleep(ATRASO_AUTO_MS);
-                    e = ui.getEstadoAtual();
-                    if (e == null) continue;
-                    if (e.getStatus() == EstadoJogo.Status.FINALIZADO) break;
-                }
-                if (e.getJogadorDaVez() == id) {
-                    botJogador.executarJogada(server, e);
-                    // Pausa de quem joga: dá aos outros 3 uma janela de ~2s cada
-                    // para agir, mantendo o ritmo uniforme de ~1 jogada/2s.
-                    if (gui) Thread.sleep(ATRASO_MOVER_MS);
-                } else if (!gui) {
-                    Thread.sleep(100);
-                }
-            }
+            jogarAutomaticamente(server, ui, sessao, gui);
             EstadoJogo fim = ui.getEstadoAtual();
-            System.out.println("[BOT " + id + "] FIM vencedor=" + fim.getVencedor()
-                    + " nome=" + fim.getNome(fim.getVencedor()));
-            System.exit(0);
+            int vencedor = fim.getVencedor();
+            System.out.println("[BOT " + id + "] FIM vencedor=" + vencedor
+                    + " nome=" + (vencedor == 0 ? "-" : fim.getNome(vencedor)));
+            if (!gui) System.exit(0);
+            // Com GUI a janela fica aberta mostrando o resultado até o usuário fechar.
         } else if (!gui) {
             ((ConsoleUI) ui).loop(server);
             System.exit(0);
         }
         // GUI em modo manual: a EDT (Event Dispatch Thread) mantém o app vivo
         // até a janela ser fechada (EXIT_ON_CLOSE).
+    }
+
+    /**
+     * Laço do bot: espera cada novo estado vindo do servidor (callback) e joga quando é a
+     * vez dele. Age no máximo uma vez por estado recebido, então nunca repete jogada com
+     * informação velha.
+     */
+    private static void jogarAutomaticamente(GameServer server, JogadorUI ui, Sessao sessao, boolean gui)
+            throws InterruptedException {
+        int id = sessao.idJogador();
+        BotJogador botJogador = new BotJogador(sessao);
+        System.out.println("[BOT " + id + "] Modo automático ativo.");
+        EstadoJogo visto = null;
+        while (true) {
+            // Dorme até chegar um estado novo (ou 1 s): sem espera ativa.
+            EstadoJogo e = ui.aguardarEstadoDiferenteDe(visto, 1000);
+            if (e == null || e == visto) continue;
+            visto = e;
+            if (e.getStatus() == EstadoJogo.Status.FINALIZADO) return;
+            if (e.getStatus() != EstadoJogo.Status.EM_ANDAMENTO || e.getJogadorDaVez() != id) continue;
+            if (gui) Thread.sleep(ATRASO_JOGADA_GUI_MS);
+            try {
+                botJogador.executarJogada(server, e);
+            } catch (JogadaInvalidaException ex) {
+                System.out.println("[BOT " + id + "] Jogada recusada: " + ex.getMessage());
+                visto = null; // reavalia com o estado atual
+                Thread.sleep(200);
+            } catch (RemoteException ex) {
+                System.out.println("[BOT " + id + "] Conexão com o servidor perdida: " + causaRaiz(ex));
+                System.exit(1);
+            } catch (Exception ex) {
+                System.out.println("[BOT " + id + "] Erro ao jogar: " + ex.getMessage());
+                visto = null;
+                Thread.sleep(200);
+            }
+        }
+    }
+
+    static String causaRaiz(Throwable t) {
+        Throwable c = t;
+        while (c.getCause() != null && c.getCause() != c) c = c.getCause();
+        return c.getMessage() == null ? c.toString() : c.getMessage();
     }
 
     private static GameServer conectar(String host, int porta) throws Exception {

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -150,5 +151,87 @@ class TabuleiroTest {
         for (int id = 1; id <= 4; id++) {
             assertTrue(t.temCaminho(id), "jogador " + id + " deve ter caminho após cerca válida");
         }
+    }
+
+    @Test
+    void verticalPodePassarNoEncontroDeDuasHorizontaisEmLinha() {
+        // H(4,2) cobre colunas 2-3 e H(4,4) cobre 4-5: o cruzamento (4,3) continua livre.
+        Tabuleiro t = new Tabuleiro();
+        Cerca h1 = new Cerca(new Posicao(4, 2), Orientacao.HORIZONTAL);
+        Cerca h2 = new Cerca(new Posicao(4, 4), Orientacao.HORIZONTAL);
+        assertTrue(t.podeColocarCerca(h1)); t.colocarCerca(h1);
+        assertTrue(t.podeColocarCerca(h2)); t.colocarCerca(h2);
+        assertTrue(t.podeColocarCerca(new Cerca(new Posicao(4, 3), Orientacao.VERTICAL)),
+                "vertical em (4,3) não cruza nenhuma das horizontais");
+    }
+
+    @Test
+    void horizontalPodePassarNoEncontroDeDuasVerticaisEmColuna() {
+        Tabuleiro t = new Tabuleiro();
+        Cerca v1 = new Cerca(new Posicao(2, 3), Orientacao.VERTICAL);
+        Cerca v2 = new Cerca(new Posicao(4, 3), Orientacao.VERTICAL);
+        assertTrue(t.podeColocarCerca(v1)); t.colocarCerca(v1);
+        assertTrue(t.podeColocarCerca(v2)); t.colocarCerca(v2);
+        assertTrue(t.podeColocarCerca(new Cerca(new Posicao(3, 3), Orientacao.HORIZONTAL)),
+                "horizontal em (3,3) passa entre as duas verticais");
+    }
+
+    @Test
+    void verticalSobrepostaDeveSerRejeitada() {
+        Tabuleiro t = new Tabuleiro();
+        t.colocarCerca(new Cerca(new Posicao(3, 3), Orientacao.VERTICAL));
+        assertFalse(t.podeColocarCerca(new Cerca(new Posicao(2, 3), Orientacao.VERTICAL)));
+        assertFalse(t.podeColocarCerca(new Cerca(new Posicao(4, 3), Orientacao.VERTICAL)));
+        assertTrue(t.podeColocarCerca(new Cerca(new Posicao(5, 3), Orientacao.VERTICAL)));
+    }
+
+    @Test
+    void peoesNaoBloqueiamCaminhoNaValidacaoDeCerca() {
+        // J1 no canto (8,0), preso por uma vertical; a única saída (7,0) está ocupada pelo J2.
+        // Peões se movem, então J1 ainda tem caminho e uma cerca qualquer continua legal.
+        Posicao[] pos = { new Posicao(8, 0), new Posicao(7, 0), new Posicao(4, 8), new Posicao(4, 0) };
+        Tabuleiro t = Tabuleiro.aPartirDe(pos, List.of(new Cerca(new Posicao(7, 0), Orientacao.VERTICAL)));
+        assertTrue(t.temCaminho(1));
+        assertTrue(t.podeColocarCerca(new Cerca(new Posicao(0, 4), Orientacao.HORIZONTAL)));
+    }
+
+    @Test
+    void puloDiagonalQuandoAtrasHaOutroPeao() {
+        // Regra de 4 jogadores: não se pula dois peões; vira pulo diagonal.
+        Posicao[] pos = { new Posicao(5, 4), new Posicao(4, 4), new Posicao(3, 4), new Posicao(4, 0) };
+        Tabuleiro t = Tabuleiro.aPartirDe(pos, List.of());
+        List<Posicao> validos = t.movimentosValidos(1);
+        assertFalse(validos.contains(new Posicao(3, 4)));
+        assertFalse(validos.contains(new Posicao(2, 4)), "não pode pular dois peões");
+        assertTrue(validos.contains(new Posicao(4, 3)));
+        assertTrue(validos.contains(new Posicao(4, 5)));
+    }
+
+    @Test
+    void movimentosNaoSeRepetem() {
+        // (3,3) é alcançável como diagonal a partir do J2 (acima) e do J3 (à esquerda).
+        Posicao[] pos = { new Posicao(4, 4), new Posicao(3, 4), new Posicao(4, 3), new Posicao(8, 8) };
+        Tabuleiro t = Tabuleiro.aPartirDe(pos, List.of(
+                new Cerca(new Posicao(2, 4), Orientacao.HORIZONTAL),
+                new Cerca(new Posicao(3, 2), Orientacao.VERTICAL)));
+        List<Posicao> validos = t.movimentosValidos(1);
+        assertEquals(1, validos.stream().filter(new Posicao(3, 3)::equals).count());
+        assertEquals(validos.size(), validos.stream().distinct().count());
+    }
+
+    @Test
+    void distanciaIgnoraPeoesEConsideraCercas() {
+        Tabuleiro t = new Tabuleiro();
+        assertEquals(8, t.distanciaMinimaAteAlvo(1));
+        t.colocarCerca(new Cerca(new Posicao(7, 3), Orientacao.HORIZONTAL));
+        assertEquals(9, t.distanciaMinimaAteAlvo(1), "contorna a cerca à frente");
+    }
+
+    @Test
+    void cercaComBaseNegativaOuForaERejeitada() {
+        Tabuleiro t = new Tabuleiro();
+        assertFalse(t.podeColocarCerca(new Cerca(new Posicao(-1, 0), Orientacao.VERTICAL)));
+        assertFalse(t.podeColocarCerca(new Cerca(new Posicao(0, -1), Orientacao.HORIZONTAL)));
+        assertFalse(t.podeColocarCerca(new Cerca(new Posicao(7, 8), Orientacao.HORIZONTAL)));
     }
 }

@@ -14,7 +14,7 @@ class GraphicUITest {
 
     private EstadoJogo estado() {
         Posicao[] pos = { new Posicao(8, 4), new Posicao(0, 4), new Posicao(4, 8), new Posicao(4, 0) };
-        return new EstadoJogo(pos, List.of(), new int[0], new int[]{10, 10, 10, 10},
+        return new EstadoJogo(pos, List.of(), new int[0], new int[]{5, 5, 5, 5},
                 1, EstadoJogo.Status.EM_ANDAMENTO, 0, new String[]{"Ana", "Bob", "Cid", "Duda"});
     }
 
@@ -27,7 +27,7 @@ class GraphicUITest {
     @Test
     void recebeEstadoEEntregaNoGetter() {
         GraphicUI g = new GraphicUI("manual");
-        g.setMeuId(2);
+        g.setSessao(new common.Sessao(2, "token"));
         EstadoJogo e = estado();
         g.novoEstado(e);
         assertSame(e, g.getEstadoAtual());

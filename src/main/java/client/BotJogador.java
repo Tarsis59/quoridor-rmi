@@ -4,99 +4,111 @@ import common.Cerca;
 import common.EstadoJogo;
 import common.GameServer;
 import common.JogadaInvalidaException;
-import common.Orientacao;
 import common.Posicao;
+import common.Sessao;
 import engine.Tabuleiro;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
+/**
+ * Jogador automático. Decide a jogada localmente (com o mesmo motor de regras do servidor)
+ * e a envia por RMI; o servidor continua sendo quem valida tudo.
+ *
+ * <p>Estratégia: anda pelo menor caminho; se um adversário estiver mais perto da meta,
+ * coloca a cerca que mais atrasa esse adversário sem atrasar a si mesmo.
+ */
 public class BotJogador {
+    private final Sessao sessao;
     private final int id;
-    private int turnos = 0;
+    private final Random aleatorio;
 
-    public BotJogador(int id) {
-        this.id = id;
+    public BotJogador(Sessao sessao) {
+        this(sessao, new Random());
+    }
+
+    BotJogador(Sessao sessao, Random aleatorio) {
+        this.sessao = sessao;
+        this.id = sessao.idJogador();
+        this.aleatorio = aleatorio;
     }
 
     public void executarJogada(GameServer server, EstadoJogo estado) throws Exception {
         Tabuleiro tabuleiro = Tabuleiro.aPartirDe(estado.getPosicoes(), estado.getCercas());
-        turnos++;
 
-        if (turnos % 4 == 0 && estado.getCercasRestantes(id) > 0
-                && tentarColocarCerca(server, tabuleiro)) {
-            return;
-        }
-
-        List<Posicao> validos = tabuleiro.movimentosValidos(id);
-        Posicao atual = tabuleiro.getPosicao(id);
-        Posicao melhor = null;
-        int melhorDistancia = tabuleiro.distanciaMinimaAteAlvo(id, atual);
-        for (Posicao p : validos) {
-            int dist = tabuleiro.distanciaMinimaAteAlvo(id, p);
-            if (dist < melhorDistancia) {
-                melhorDistancia = dist;
-                melhor = p;
+        Cerca cerca = escolherCerca(tabuleiro, estado);
+        if (cerca != null) {
+            try {
+                server.colocarCerca(sessao, cerca);
+                return;
+            } catch (JogadaInvalidaException ignorada) {
+                // Estado mudou entre a decisão e o envio: cai para o movimento.
             }
         }
-        if (melhor != null) {
-            server.mover(id, melhor);
+
+        Posicao destino = escolherMovimento(tabuleiro);
+        if (destino != null) {
+            server.mover(sessao, destino);
             return;
         }
-        if (tentarColocarCerca(server, tabuleiro)) return;
-        if (!validos.isEmpty()) {
-            server.mover(id, validos.get(0));
-            return;
+        // Sem movimento (cercado por peões): qualquer cerca legal serve para não perder a vez.
+        if (estado.getCercasRestantes(id) > 0) {
+            List<Cerca> possiveis = tabuleiro.cercasPossiveis();
+            if (!possiveis.isEmpty()) {
+                server.colocarCerca(sessao, possiveis.get(aleatorio.nextInt(possiveis.size())));
+                return;
+            }
         }
         throw new IllegalStateException("Bot " + id + " sem jogadas possíveis.");
     }
 
-    private boolean tentarColocarCerca(GameServer server, Tabuleiro tabuleiro) throws Exception {
-        int alvo = jogadorMaisProximoDoAlvo(tabuleiro);
-        List<Posicao> bases = gerarBasesOrdenadas(tabuleiro.getPosicao(alvo));
-        int limite = Math.min(24, bases.size());
-        for (int i = 0; i < limite; i++) {
-            Posicao base = bases.get(i);
-            for (Orientacao o : new Orientacao[]{Orientacao.HORIZONTAL, Orientacao.VERTICAL}) {
-                Cerca cerca = new Cerca(base, o);
-                try {
-                    server.colocarCerca(id, cerca);
-                    return true;
-                } catch (JogadaInvalidaException ignorada) {
-                    // tenta a próxima base/orientação
-                }
+    /** Movimento que mais reduz a distância até a meta (empates sorteados, evitando ciclos). */
+    Posicao escolherMovimento(Tabuleiro tabuleiro) {
+        List<Posicao> melhores = new ArrayList<>();
+        int melhor = Integer.MAX_VALUE;
+        for (Posicao p : tabuleiro.movimentosValidos(id)) {
+            int dist = tabuleiro.distanciaMinimaAteAlvo(id, p);
+            if (dist < melhor) {
+                melhor = dist;
+                melhores.clear();
             }
+            if (dist == melhor) melhores.add(p);
         }
-        return false;
+        return melhores.isEmpty() ? null : melhores.get(aleatorio.nextInt(melhores.size()));
     }
 
-    private int jogadorMaisProximoDoAlvo(Tabuleiro tabuleiro) {
+    /**
+     * Cerca contra o adversário mais adiantado, apenas se ele estiver à frente do bot (ou
+     * a 2 passos de vencer) e se a cerca render ganho líquido. Devolve null se não valer a pena.
+     */
+    Cerca escolherCerca(Tabuleiro tabuleiro, EstadoJogo estado) {
+        if (estado.getCercasRestantes(id) <= 0) return null;
+        int minhaDist = tabuleiro.distanciaMinimaAteAlvo(id);
         int alvo = -1;
-        int melhorDistancia = Integer.MAX_VALUE;
-        for (int i = 1; i <= 4; i++) {
-            if (i == id) continue;
-            int dist = tabuleiro.distanciaMinimaAteAlvo(i);
-            if (dist < melhorDistancia) {
-                melhorDistancia = dist;
-                alvo = i;
+        int distAlvo = Integer.MAX_VALUE;
+        for (int outro = 1; outro <= Tabuleiro.NUM_JOGADORES; outro++) {
+            if (outro == id || !estado.isAtivo(outro)) continue;
+            int d = tabuleiro.distanciaMinimaAteAlvo(outro);
+            if (d < distAlvo) {
+                distAlvo = d;
+                alvo = outro;
             }
         }
-        return alvo;
-    }
+        if (alvo < 0 || (distAlvo >= minhaDist && distAlvo > 2)) return null;
 
-    private List<Posicao> gerarBasesOrdenadas(Posicao foco) {
-        List<Posicao> bases = new ArrayList<>();
-        for (int r = 0; r <= 7; r++) {
-            for (int c = 0; c <= 7; c++) {
-                bases.add(new Posicao(r, c));
+        Cerca escolhida = null;
+        int melhorGanho = 0;
+        for (Cerca c : tabuleiro.cercasPossiveis()) {
+            Tabuleiro sim = tabuleiro.copiar();
+            sim.colocarCerca(c);
+            int ganho = (sim.distanciaMinimaAteAlvo(alvo) - distAlvo)
+                    - (sim.distanciaMinimaAteAlvo(id) - minhaDist);
+            if (ganho > melhorGanho) {
+                melhorGanho = ganho;
+                escolhida = c;
             }
         }
-        bases.sort((a, b) -> Integer.compare(
-                distManhattan(a, foco), distManhattan(b, foco)));
-        return bases;
-    }
-
-    private int distManhattan(Posicao a, Posicao b) {
-        return Math.abs(a.linha() - b.linha()) + Math.abs(a.coluna() - b.coluna());
+        return escolhida;
     }
 }

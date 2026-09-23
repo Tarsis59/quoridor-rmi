@@ -19,16 +19,22 @@ class E2ETest {
     private final List<Process> processos = new ArrayList<>();
     private final Map<Process, StringBuilder> logs = new ConcurrentHashMap<>();
 
+    /** Porta alta aleatória, para o teste não colidir com um servidor do jogo já aberto na 1099. */
+    private static String portaLivre() {
+        return String.valueOf(20000 + java.util.concurrent.ThreadLocalRandom.current().nextInt(20000));
+    }
+
     @Test
     void partidaCompletaComQuatroBots() throws Exception {
         String classpath = System.getProperty("java.class.path");
+        String porta = portaLivre();
 
-        Process servidor = iniciar(classpath, "server.ServerMain");
+        Process servidor = iniciar(classpath, "server.ServerMain", "--porta", porta);
         Thread.sleep(4000);
 
         List<Process> clientes = new ArrayList<>();
         for (int i = 1; i <= 4; i++) {
-            clientes.add(iniciar(classpath, "client.ClientMain", "--nome", "Bot" + i, "--bot"));
+            clientes.add(iniciar(classpath, "client.ClientMain", "--nome", "Bot" + i, "--bot", "--porta", porta));
             Thread.sleep(300);
         }
 
@@ -72,6 +78,42 @@ class E2ETest {
         }
         System.out.println("E2E OK: partida completa terminou com vencedor=" + vencedor
                 + " e os 4 clientes receberam o estado final via callback.");
+    }
+
+    @Test
+    void partidaContinuaQuandoUmClienteCai() throws Exception {
+        String classpath = System.getProperty("java.class.path");
+        String porta = portaLivre();
+
+        Process servidor = iniciar(classpath, "server.ServerMain", "--porta", porta);
+        Thread.sleep(4000);
+        List<Process> clientes = new ArrayList<>();
+        for (int i = 1; i <= 4; i++) {
+            clientes.add(iniciar(classpath, "client.ClientMain", "--nome", "Bot" + i, "--bot", "--porta", porta));
+            Thread.sleep(300);
+        }
+        // Espera a partida começar e derruba o processo do Jogador 2 à força (queda de rede / janela fechada).
+        long prazoInicio = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(30);
+        while (System.currentTimeMillis() < prazoInicio && !logDe(servidor).contains("A partida começou")) {
+            Thread.sleep(200);
+        }
+        clientes.get(1).destroyForcibly();
+
+        long prazo = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(3);
+        String logServidor = "";
+        while (System.currentTimeMillis() < prazo) {
+            logServidor = logDe(servidor);
+            if (logServidor.contains("[FIM]") || !servidor.isAlive()) break;
+            Thread.sleep(500);
+        }
+        System.out.println("===== LOG SERVIDOR (queda) =====");
+        System.out.println(logServidor);
+        for (Process p : processos) p.destroy();
+
+        assertTrue(logServidor.contains("Jogador 2 desconectado"),
+                "O servidor deveria detectar a queda do J2. Log:\n" + logServidor);
+        assertTrue(logServidor.contains("[FIM]"), "A partida deveria terminar mesmo sem o J2. Log:\n" + logServidor);
+        assertTrue(!logServidor.contains("[FIM] vencedor=2"), "Quem caiu não pode vencer. Log:\n" + logServidor);
     }
 
     private int extrairVencedor(String linha) {

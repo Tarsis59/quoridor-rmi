@@ -19,6 +19,7 @@ public class PainelJogadores extends JPanel {
     private final List<JLabel> badges = new ArrayList<>();
     private final List<JLabel> metadados = new ArrayList<>();
     private final List<JPanel> dots = new ArrayList<>();
+    private final List<JLabel> nomes = new ArrayList<>();
 
     public PainelJogadores() {
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
@@ -47,6 +48,7 @@ public class PainelJogadores extends JPanel {
 
         JLabel nome = new JLabel("Jogador " + id);
         nome.setFont(EstiloUI.FONTE_NORMAL);
+        nomes.add(nome);
         linha.add(nome);
 
         JLabel meta = new JLabel();
@@ -69,7 +71,7 @@ public class PainelJogadores extends JPanel {
     public void atualizar(EstadoJogo e, int meuId) {
         for (int id = 1; id <= 4; id++) {
             JPanel linha = linhas.get(id - 1);
-            boolean vez = e.getJogadorDaVez() == id;
+            boolean vez = e.getStatus() == EstadoJogo.Status.EM_ANDAMENTO && e.getJogadorDaVez() == id;
             boolean voce = meuId == id;
             linha.setBackground(vez ? EstiloUI.BADGE_VEZ_FUNDO
                     : voce ? EstiloUI.VOCE_FUNDO : EstiloUI.FUNDO_JANELA);
@@ -80,14 +82,20 @@ public class PainelJogadores extends JPanel {
                                     : voce ? EstiloUI.VOCE_BORDA : Color.WHITE),
                             BorderFactory.createEmptyBorder(5, 7, 5, 7))));
             Posicao p = e.getPosicao(id);
+            nomes.get(id - 1).setText(e.getNome(id) + (voce ? " (você)" : ""));
+            int cercas = e.getCercasRestantes(id);
             metadados.get(id - 1).setText("(" + p.linha() + "," + p.coluna() + ") · "
-                    + e.getCercasRestantes(id) + " cercas");
-            badges.get(id - 1).setText(vez ? "VEZ" : "");
-            badges.get(id - 1).setBackground(vez ? EstiloUI.BADGE_VEZ_BORDA : EstiloUI.FUNDO_JANELA);
+                    + cercas + (cercas == 1 ? " cerca" : " cercas")
+                    + (e.isAtivo(id) ? "" : " · SAIU"));
+            boolean venceu = e.getStatus() == EstadoJogo.Status.FINALIZADO && e.getVencedor() == id;
+            badges.get(id - 1).setText(vez ? "VEZ" : venceu ? "VENCEU" : "");
+            badges.get(id - 1).setBackground(vez || venceu ? EstiloUI.BADGE_VEZ_BORDA : EstiloUI.FUNDO_JANELA);
         }
     }
 
     // Acesso para testes.
     JLabel badge(int idJogador) { return badges.get(idJogador - 1); }
     JPanel linha(int idJogador) { return linhas.get(idJogador - 1); }
+    JLabel nome(int idJogador) { return nomes.get(idJogador - 1); }
+    JLabel meta(int idJogador) { return metadados.get(idJogador - 1); }
 }

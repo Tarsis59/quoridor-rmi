@@ -39,8 +39,8 @@ Implementar o jogo de tabuleiro **Quoridor** para **4 jogadores** de forma **dis
 ```
 
 - O servidor cria o **RMI Registry embutido** no próprio processo (`LocateRegistry.createRegistry(1099)`), evitando a dependência do utilitário externo `rmiregistry`, que é uma fonte comum de problemas em demonstrações.
-- Cada cliente, ao iniciar, faz `lookup` do serviço `QuoridorServer` e chama `registrar(callback, nome)`, entregando seu próprio objeto remoto de callback.
-- Toda ação de jogo (`mover`, `colocarCerca`) é uma chamada **RMI síncrona** cliente → servidor. O servidor valida contra a engine, atualiza o estado e, se válido, **notifica os 4 clientes** via callback (`aoAtualizarEstado`).
+- Cada cliente, ao iniciar, faz `lookup` do serviço `QuoridorServer` e chama `registrar(callback, nome)`, entregando seu próprio objeto remoto de callback e recebendo uma `Sessao` (id 1–4 + token secreto).
+- Toda ação de jogo (`mover(sessao, destino)`, `colocarCerca(sessao, cerca)`) é uma chamada **RMI síncrona** cliente → servidor. O servidor valida contra a engine, atualiza o estado e, se válido, **notifica os 4 clientes** via callback (`aoAtualizarEstado`).
 
 ## 4. Componentes
 
@@ -51,21 +51,22 @@ Implementar o jogo de tabuleiro **Quoridor** para **4 jogadores** de forma **dis
 | `Posicao` | `record` serializável com `linha`/`coluna` (0–8). |
 | `Orientacao` | `enum` `HORIZONTAL`/`VERTICAL`. |
 | `Cerca` | `Posicao` base + `Orientacao` (segmento de 2 casas). |
-| `EstadoJogo` | Snapshot serializável: posições dos 4 peões, cercas colocadas, cercas restantes, jogador da vez, status (`AGUARDANDO`/`EM_ANDAMENTO`/`FINALIZADO`) e vencedor. |
+| `EstadoJogo` | Snapshot serializável: posições dos 4 peões, cercas colocadas (e o dono de cada uma), cercas restantes, jogador da vez, status (`AGUARDANDO`/`EM_ANDAMENTO`/`FINALIZADO`), vencedor, quem ainda está conectado e quantos já entraram na sala. |
+| `Sessao` | `record` (id do jogador + token aleatório de 192 bits) devolvido no registro; o `toString` não expõe o token. |
 | `JogadaInvalidaException` | Exception serializável (RMI exige exceções remotas serializáveis). |
 | `GameServer` | Interface remota: `registrar`, `mover`, `colocarCerca`, `obterEstado`. |
-| `ClientCallback` | Interface remota: `aoIniciarJogo`, `aoAtualizarEstado`, `aoFinalizarJogo`. |
+| `ClientCallback` | Interface remota: `aoIniciarJogo`, `aoAtualizarEstado`, `aoFinalizarJogo`, `ping` (batimento). |
 
 ### Pacote `engine` (regras puras, sem RMI — 100% testável)
 
-- `Tabuleiro` — tabuleiro 9×9, posições dos peões, matrizes de paredes horizontais e verticais, e toda a lógica de regras.
-- `Partida` — orquestração: nomes, cercas restantes, ordem de turnos, condição de vitória e geração de `EstadoJogo`.
+- `Tabuleiro` — tabuleiro 9×9, posições dos peões, matrizes de arestas bloqueadas (horizontais e verticais), matriz 8×8 dos **pontos centrais** ocupados por cercas, e toda a lógica de regras.
+- `Partida` — orquestração: nomes, cercas restantes, jogadores ativos, ordem de turnos (pulando desconectados/travados), condição de vitória (inclusive W.O.) e geração de `EstadoJogo`.
 
 As regras implementadas:
 1. **Movimento ortogonal** de 1 casa, se a casa estiver livre e não houver parede entre as casas.
-2. **Pulo sobre peão adjacente**: se a casa de destino está ocupada, verifica a casa **atrás** do adversário na mesma direção (pulo reto); se bloqueada, tenta as **duas casas laterais**; se também bloqueadas, o movimento nessa direção é inválido.
-3. **Colocação de cerca**: dentro do tabuleiro, sem sobreposição e sem cruzamento sobre uma cerca já existente.
-4. **Caminho garantido (BFS)**: antes de confirmar uma cerca, o servidor **simula** a colocação e roda uma busca em largura a partir da posição de cada um dos 4 peões até a respectiva borda de destino. Se qualquer jogador ficar sem caminho, a cerca é **rejeitada** (`JogadaInvalidaException`) — regra que impede "prender" um adversário sem vitória.
+2. **Pulo sobre peão adjacente**: se a casa de destino está ocupada, verifica a casa **atrás** do adversário na mesma direção (pulo reto); se ali houver cerca, borda **ou outro peão** (com 4 jogadores não se pulam 2 peões), tenta as **duas casas diagonais**; se também bloqueadas, o movimento nessa direção é inválido. A lista de destinos não tem repetições.
+3. **Colocação de cerca**: base de 0 a 7, sem sobreposição (aresta já ocupada) e sem **cruzamento** — cada cerca ocupa o ponto central entre suas duas metades, e duas cercas não podem usar o mesmo ponto central. Assim, uma vertical pode passar entre duas horizontais colocadas em linha (que não se cruzam), exatamente como no tabuleiro físico.
+4. **Caminho garantido (BFS)**: antes de confirmar uma cerca, o servidor **simula** a colocação e roda uma busca em largura a partir da posição de cada um dos 4 peões até a respectiva borda de destino. Peões **não** contam como obstáculo nessa busca (eles se movem e podem ser pulados), conforme a regra oficial. Se qualquer jogador ficar sem caminho, a cerca é **rejeitada** (`JogadaInvalidaException`).
 5. **Condição de vitória por borda** (variante 4 jogadores):
 
    | Jogador | Início | Destino |
@@ -75,27 +76,30 @@ As regras implementadas:
    | 3 | `(4,8)` | coluna 0 (esquerda) |
    | 4 | `(4,0)` | coluna 8 (direita) |
 
-   Cada jogador começa com **10 cercas**.
+   Cada jogador começa com **5 cercas** — regra oficial do Quoridor para 4 jogadores (as 20 cercas do jogo divididas entre os 4).
+6. **Jogador travado**: se um jogador não tiver nenhum movimento legal nem cerca possível (raro, mas possível com 4 peões), sua vez é pulada em vez de travar a partida.
 
 ### Pacote `server`
 
-- `GameServerImpl extends UnicastRemoteObject implements GameServer` — encapsula a `Partida`, controla a fila de turnos (aceita apenas jogada do jogador da vez), mantém os callbacks registrados em `ConcurrentHashMap` e faz **broadcast** via callback após cada jogada válida. Um thread *daemon* de vigilância (`vigiarDesconexoes`) avança o turno automaticamente quando o jogador da vez desconectou.
-- `ServerMain` — cria o registry embutido, faz `rebind` do serviço e aguarda os jogadores.
+- `GameServerImpl extends UnicastRemoteObject implements GameServer` — encapsula a `Partida`, **autentica cada jogada pela sessão** (token comparado em tempo constante; um cliente não consegue jogar no lugar de outro), mantém os callbacks registrados e faz **broadcast** via callback após cada mudança de estado (inclusive durante a espera, mostrando "2/4 jogadores"). Um thread *daemon* de vigilância faz **ping** em todos os clientes a cada 1,5 s — fora do lock, para um cliente lento não travar os demais — e marca como desconectado quem não responde.
+- `ServerMain` — cria o registry embutido, faz `rebind` do serviço, define um *timeout* de resposta RMI (5 s) para callbacks e aguarda os jogadores.
 
 ### Pacote `client`
 
-- `ClientCallbackImpl extends UnicastRemoteObject implements ClientCallback` — recebe os snapshots e delega para a `UI` local (com `synchronized` para garantir thread-safety entre a thread de callback e a thread de leitura de comandos).
-- `ConsoleUI` — desenha o tabuleiro 9×9 em caracteres, lê comandos (`mover`, `cerca`, `ajuda`, `sair`) e exibe mensagens claras para `JogadaInvalidaException`.
-- `BotJogador` — IA simples usada na validação E2E e no modo demo (`--bot`): avança pela menor distância até a meta e, periodicamente, tenta cercas para atrasar o oponente mais próximo.
-- `ClientMain` — faz `lookup`, registra o callback e entra no loop de UI (ou no loop do bot).
+- `ClientCallbackImpl extends UnicastRemoteObject implements ClientCallback` — recebe os snapshots e delega para a `UI` local; responde ao `ping` do servidor.
+- `CaixaEstado` — guarda o último estado recebido e acorda (wait/notify) quem espera por um novo, sem *polling*.
+- `ConsoleUI` — desenha o tabuleiro 9×9 em caracteres, mostra os movimentos válidos na sua vez, lê comandos (`mover`, `cerca`, `tabuleiro`, `ajuda`, `sair`) e exibe mensagens claras para `JogadaInvalidaException`.
+- `BotJogador` — IA usada na validação E2E e no modo demo (`--bot`): anda pelo menor caminho (BFS) e, quando um adversário está mais perto da vitória, coloca a cerca de maior ganho líquido (atraso do adversário − atraso próprio).
+- `ClientMain` — faz `lookup`, registra o callback e entra no loop de UI (ou no loop do bot, que age no máximo uma vez por estado recebido).
 
 ## 5. Protocolo RMI e fluxo de dados
 
-1. Cliente → `GameServer.registrar(callback, nome)` → servidor guarda o callback e atribui o `idJogador` (1–4).
-2. No **4º registro**, o servidor inicia a partida, monta o `EstadoJogo` inicial e chama `aoIniciarJogo` nos 4 callbacks.
-3. O jogador da vez chama `mover`/`colocarCerca` → o servidor valida contra a engine → se válido, atualiza o estado, avança o turno e chama `aoAtualizarEstado` nos 4 callbacks (inclusive no ativo, para refletir o novo turno).
-4. Jogada inválida → o servidor lança `JogadaInvalidaException` de volta **apenas ao próprio cliente** (padrão de erro imediato, sem broadcast).
-5. Vitória → o servidor marca `FINALIZADO` + `idVencedor`, chama `aoFinalizarJogo(idVencedor)` e depois `aoAtualizarEstado` nos 4 callbacks.
+1. Cliente → `GameServer.registrar(callback, nome)` → servidor guarda o callback, atribui o `idJogador` (1–4), gera o token e devolve a `Sessao`. Nomes são sanitizados (sem caracteres de controle, até 20 caracteres). Um 5º cliente recebe "Sala cheia".
+2. No **4º registro**, o servidor inicia a partida e chama `aoIniciarJogo` nos 4 callbacks (exatamente uma vez por cliente).
+3. O jogador da vez chama `mover`/`colocarCerca` com sua sessão → o servidor autentica, valida contra a engine → se válido, atualiza o estado, avança o turno e chama `aoAtualizarEstado` nos callbacks conectados (inclusive no ativo, para refletir o novo turno).
+4. Jogada inválida ou sessão inválida → o servidor lança `JogadaInvalidaException` de volta **apenas ao próprio cliente** (sem broadcast).
+5. Vitória → o servidor marca `FINALIZADO` + `idVencedor`, envia primeiro `aoAtualizarEstado` (tabuleiro final) e depois `aoFinalizarJogo(idVencedor)`, uma única vez para cada cliente.
+6. Queda de cliente (falha num callback ou no `ping`) → o jogador é marcado como inativo, sua vez passa a ser pulada e todos recebem o novo estado; se sobrar 1 jogador conectado, ele vence por W.O.
 
 ## 6. Decisões de design
 
@@ -103,7 +107,8 @@ As regras implementadas:
 - **Broadcast para os 4 clientes, inclusive o ativo**: simplifica o cliente — ele não precisa "adivinhar" o resultado da própria jogada; o estado chega pelo mesmo canal em todos os casos.
 - **Erros de jogada como exceção direta, não callback**: o erro pertence a quem jogou; é mais simples e imediato do que um canal assíncrono.
 - **Engine desacoplada do RMI**: as regras vivem em `engine` sem nenhuma referência a RMI, o que permite testá-las isoladamente com JUnit — a parte que mais impacta a nota.
-- **Desconexão tolerada**: `RemoteException` no broadcast marca o cliente como desconectado sem derrubar o servidor; se o jogador da vez desconectou, o vigia avança o turno para a partida não travar.
+- **Desconexão tolerada**: `RemoteException` no broadcast ou no `ping` marca o cliente como desconectado sem derrubar o servidor. Antes da revisão, a queda do jogador **da vez** só era percebida no próximo broadcast — que nunca acontecia, travando a partida; o *ping* periódico resolve isso.
+- **Autorização por recurso**: não basta "estar conectado" — cada jogada precisa da sessão do próprio jogador, evitando que um cliente mova o peão de outro.
 - **Baixo acoplamento por `EstadoJogo`**: o estado completo é transportado em um único snapshot serializável, o que facilita reconexão e sincronização.
 
 ## 7. Interface gráfica (Swing)
@@ -137,15 +142,18 @@ Para facilitar a identificação visual, cada **cerca é pintada com a cor do jo
 
 ### 7.4 Validação
 
-- **13 novos testes JUnit** (pacote `client.ui`): `GeometriaTest` (pixel ↔ casa/aresta), `TabuleiroPanelTest` (clique → `Posicao`/`Cerca` via eventos sintéticos), `PainelJogadoresTest`, `BarraStatusTest` e `GraphicUITest` (construção e troca de estado sem abrir janela).
-- **Demo automática executada (2026-08-28):** 1 servidor + 4 clientes `--gui --modo auto` jogaram uma partida completa até `[FIM] vencedor=4 (Bot4)`, com a janela exibindo o tabuleiro evoluindo em ~1 jogada/2s (partida de ~82s), tempo suficiente para acompanhar cada jogada e cada cerca colorida. A captura está em `docs/img/quoridor-gui.png`.
+- **Testes JUnit** (pacote `client.ui`): `GeometriaTest` (pixel ↔ casa/aresta), `TabuleiroPanelTest` (clique → `Posicao`/`Cerca` via eventos sintéticos), `PainelJogadoresTest`, `BarraStatusTest` e `GraphicUITest` (construção e troca de estado sem abrir janela).
+- No modo manual, as casas legais só são destacadas **na vez do próprio jogador**, cliques fora da vez geram aviso sem chamar o servidor, e as chamadas RMI saem da thread da interface (a janela nunca congela esperando a rede). No modo automático o tabuleiro fica só de exibição.
+- Cada borda de chegada é pintada com o tom claro da cor do jogador que precisa alcançá-la; o peão de quem saiu fica esmaecido e o painel mostra "SAIU". A captura está em `docs/img/quoridor-gui.png`.
 
 ## 8. Testes e validação
 
 ### Unitários (JUnit 5)
 
-- `TabuleiroTest` (12 casos): movimento nas 4 direções, borda do tabuleiro, parede bloqueando movimento, pulo reto, pulo lateral, pulo bloqueado, cerca sobreposta/cruzada/fora do tabuleiro, **cerca que isolaria um jogador (rejeitada)**, cerca válida preservando caminho de todos, vitória pelos 4 lados.
-- `PartidaTest` (5 casos): jogada fora da vez rejeitada, turnos em ciclo, vitória ao alcançar a meta, movimento inválido, estado inicial correto.
+- `TabuleiroTest` (20 casos): movimento nas 4 direções, borda, parede bloqueando movimento, pulo reto, pulo diagonal (cerca atrás e **outro peão atrás**), pulo bloqueado, sem destinos repetidos, cerca sobreposta/cruzada/fora do tabuleiro, **vertical entre duas horizontais em linha (permitida)**, cerca que isolaria um jogador (rejeitada), peões não bloqueiam caminho, distância BFS, vitória pelos 4 lados.
+- `PartidaTest` (13 casos): jogada fora da vez, turnos em ciclo, vitória, movimento inválido, estado inicial com **5 cercas**, 6ª cerca recusada, vez pulada de desconectado, W.O., entradas nulas, nome sanitizado.
+- `GameServerImplTest` (10 casos): tokens distintos, 5º jogador recusado, **jogar no lugar de outro é recusado**, broadcast a todos, estado de espera, queda detectada por ping, W.O., jogador que caiu não volta a jogar, fim avisado uma única vez e após o estado final.
+- `BotJogadorTest` (5 casos) e `ConsoleUITest` (2 casos): estratégia do bot, 5 partidas completas simuladas terminando sempre, interpretação de comandos.
 
 ### SemSocketTest
 
@@ -159,7 +167,9 @@ Sobe **1 servidor + 4 clientes em processos JVM separados** (`ProcessBuilder`) c
 - Verifica que a partida terminou (`[FIM] vencedor=<1–4>`).
 - Verifica que **os 4 clientes receberam o mesmo vencedor** via callback (`FIM vencedor=` no log de cada cliente).
 
-**Resultado da validação (execução real em 2026-08-28):** a partida completa terminou com **vencedor = 4 (Bot4)**, que alcançou a coluna 8, e os 4 clientes confirmaram o estado final via callback.
+Um segundo cenário (`partidaContinuaQuandoUmClienteCai`) mata à força o processo do Jogador 2 logo após o início e verifica que o servidor detecta a queda, pula a vez dele e a partida termina com outro vencedor.
+
+**Resultado da validação (execução real em 2026-09-23):** os dois cenários E2E passaram; na partida completa foram colocadas exatamente 20 cercas (5 por jogador) e os 4 clientes confirmaram o mesmo vencedor via callback.
 
 ## 9. Como validar
 
@@ -190,4 +200,4 @@ java -cp target/classes client.ClientMain --gui --modo auto --nome Bot4
 
 ## 10. Conclusão
 
-O projeto entrega um Quoridor distribuído completo e funcional em Java RMI puro: engine com regras robustas (incluindo pulo e caminho garantido por BFS), servidor com registry embutido e broadcast via callback, clientes com interface de console, modo bot e **interface gráfica Swing** (manual por cliques e automática ilustrativa), e uma suíte de testes que cobre unitário, a GUI, ausência de sockets e uma partida E2E completa — atendendo integralmente os requisitos da disciplina.
+O projeto entrega um Quoridor distribuído completo e funcional em Java RMI puro: engine com as regras oficiais para 4 jogadores (5 cercas cada, pulos reto e diagonal, cruzamento correto de cercas e caminho garantido por BFS), servidor com registry embutido, autorização por sessão, detecção de queda por ping e broadcast via callback, clientes com interface de console, modo bot e **interface gráfica Swing** (manual por cliques e automática ilustrativa), e uma suíte de testes que cobre unitário, a GUI, ausência de sockets e uma partida E2E completa — atendendo integralmente os requisitos da disciplina.

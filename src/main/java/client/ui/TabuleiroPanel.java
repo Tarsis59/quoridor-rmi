@@ -15,6 +15,7 @@ import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.List;
+import java.util.function.Consumer;
 
 public class TabuleiroPanel extends JPanel {
     public enum Modo { MOVER, CERCA_H, CERCA_V }
@@ -33,12 +34,15 @@ public class TabuleiroPanel extends JPanel {
     private Cerca preview;
     private boolean previewValida;
     private JogadaListener listener;
+    private Consumer<Modo> aoMudarModo = m -> { };
+    private boolean interativo = true;
 
     public TabuleiroPanel() {
         setPreferredSize(new Dimension(Geometria.LADO, Geometria.LADO));
         setOpaque(false);
         MouseAdapter mouse = new MouseAdapter() {
             @Override public void mouseMoved(MouseEvent e) { atualizarPreview(e.getX(), e.getY()); }
+            @Override public void mouseExited(MouseEvent e) { preview = null; repaint(); }
             @Override public void mouseClicked(MouseEvent e) {
                 if (e.getButton() == MouseEvent.BUTTON3) { alternarOrientacao(); return; }
                 clique(e.getX(), e.getY());
@@ -50,7 +54,15 @@ public class TabuleiroPanel extends JPanel {
 
     public void setListener(JogadaListener l) { this.listener = l; }
     public void setMeuId(int id) { this.meuId = id; recomputarLegais(); }
-    public void setModo(Modo m) { this.modo = m; this.preview = null; repaint(); }
+    public void setModo(Modo m) {
+        this.modo = m;
+        this.preview = null;
+        aoMudarModo.accept(m);
+        repaint();
+    }
+    public void setAoMudarModo(Consumer<Modo> c) { this.aoMudarModo = c == null ? m -> { } : c; }
+    /** false no modo automático: o tabuleiro só exibe, não aceita cliques. */
+    public void setInterativo(boolean interativo) { this.interativo = interativo; recomputarLegais(); }
     public Modo getModo() { return modo; }
 
     public void setEstado(EstadoJogo e) {
@@ -59,14 +71,22 @@ public class TabuleiroPanel extends JPanel {
         recomputarLegais();
     }
 
+    /** É a minha vez numa partida em andamento? */
+    private boolean minhaVez() {
+        return estado != null && meuId > 0
+                && estado.getStatus() == EstadoJogo.Status.EM_ANDAMENTO
+                && estado.getJogadorDaVez() == meuId;
+    }
+
+    /** Casas destacadas: só os movimentos legais e só quando é a vez deste jogador. */
     private void recomputarLegais() {
-        this.legais = (estado != null && modelo != null && meuId > 0)
+        this.legais = (interativo && modelo != null && minhaVez())
                 ? modelo.movimentosValidos(meuId) : List.of();
         repaint();
     }
 
     private void atualizarPreview(int x, int y) {
-        if (estado == null || modelo == null) { preview = null; repaint(); return; }
+        if (!interativo || estado == null || modelo == null) { preview = null; repaint(); return; }
         preview = cercaCandidata(x, y);
         previewValida = (preview == null) || modelo.podeColocarCerca(preview);
         repaint();
@@ -79,7 +99,15 @@ public class TabuleiroPanel extends JPanel {
     }
 
     private void clique(int x, int y) {
-        if (estado == null || modelo == null || listener == null) return;
+        if (!interativo || estado == null || modelo == null || listener == null) return;
+        if (estado.getStatus() != EstadoJogo.Status.EM_ANDAMENTO) {
+            listener.onAviso("A partida não está em andamento.");
+            return;
+        }
+        if (!minhaVez()) {
+            listener.onAviso("Aguarde sua vez: agora joga o Jogador " + estado.getJogadorDaVez() + ".");
+            return;
+        }
         if (modo == Modo.MOVER) {
             Posicao casa = Geometria.casaEm(x, y);
             if (casa == null) return;
@@ -92,7 +120,7 @@ public class TabuleiroPanel extends JPanel {
                 listener.onColocarCerca(c);
                 setModo(Modo.MOVER);
             } else {
-                listener.onAviso("Cerca inválida: sobreposição ou bloqueia um caminho.");
+                listener.onAviso("Cerca inválida: sobreposição, cruzamento ou bloqueia todo o caminho de alguém.");
             }
         }
     }
@@ -139,11 +167,18 @@ public class TabuleiroPanel extends JPanel {
         }
     }
 
+    /** Borda de chegada de cada jogador pintada com um tom claro da cor dele; miolo branco. */
+    private static final Color META_J1 = new Color(0xFFE4E4);
+    private static final Color META_J2 = new Color(0xE3EDFF);
+    private static final Color META_J3 = new Color(0xE2F6E6);
+    private static final Color META_J4 = new Color(0xFFF1D6);
+
     private Color corMeta(int r, int c) {
-        if (r == 0) return new Color(0xFFF1F1);
-        if (r == 8) return new Color(0xF1F6FF);
-        if (c == 0) return new Color(0xF2FBF3);
-        return new Color(0xFFF9EC);
+        if (r == 0) return META_J1;
+        if (r == 8) return META_J2;
+        if (c == 0) return META_J3;
+        if (c == 8) return META_J4;
+        return EstiloUI.CASA;
     }
 
     private boolean casaDestaque(int r, int c) {
@@ -176,9 +211,11 @@ public class TabuleiroPanel extends JPanel {
             Posicao p = estado.getPosicao(id);
             var c = Geometria.centroDaCasa(p.linha(), p.coluna());
             int raio = Geometria.CELULA / 3;
-            g.setColor(EstiloUI.COR_PEAO[id - 1]);
+            Color cor = EstiloUI.COR_PEAO[id - 1];
+            // Peão de quem saiu da partida fica esmaecido (continua ocupando a casa).
+            g.setColor(estado.isAtivo(id) ? cor : new Color(cor.getRed(), cor.getGreen(), cor.getBlue(), 90));
             g.fillOval(c.x - raio, c.y - raio, raio * 2, raio * 2);
-            if (estado.getJogadorDaVez() == id) {
+            if (estado.getStatus() == EstadoJogo.Status.EM_ANDAMENTO && estado.getJogadorDaVez() == id) {
                 g.setColor(EstiloUI.BADGE_VEZ_BORDA);
                 g.setStroke(new java.awt.BasicStroke(3f));
                 g.drawOval(c.x - raio - 4, c.y - raio - 4, raio * 2 + 8, raio * 2 + 8);
@@ -214,9 +251,9 @@ public class TabuleiroPanel extends JPanel {
         g.setColor(EstiloUI.TEXTO_SECUNDARIO);
         for (int i = 0; i < 9; i++) {
             var col = Geometria.rectDaCasa(0, i);
-            g.drawString(String.valueOf(i), col.x + col.width / 2 - 3, Geometria.MARGEM - 4);
+            g.drawString(String.valueOf(i), col.x + col.width / 2 - 3, Geometria.MARGEM - 2);
             var lin = Geometria.rectDaCasa(i, 0);
-            g.drawString(String.valueOf(i), Geometria.MARGEM - 14, lin.y + lin.height / 2 + 4);
+            g.drawString(String.valueOf(i), 2, lin.y + lin.height / 2 + 4);
         }
     }
 }

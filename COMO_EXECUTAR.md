@@ -96,14 +96,17 @@ Quando **for a sua vez**, o console mostra `Sua vez (Jogador X). Comando:` e exi
 | `mover baixo` | `mover baixo` | Move 1 casa para baixo |
 | `mover esquerda` | `mover esquerda` | Move 1 casa para a esquerda |
 | `mover direita` | `mover direita` | Move 1 casa para a direita |
-| `mover <linha> <coluna>` | `mover 3 4` | Move para uma casa específica |
+| `mover <linha> <coluna>` | `mover 3 4` | Move para uma casa específica (use para pulos diagonais) |
 | `cerca <linha> <coluna> <h\|v>` | `cerca 4 4 h` | Coloca uma cerca horizontal/vertical |
+| `tabuleiro` | `tabuleiro` | Redesenha o tabuleiro |
 | `ajuda` | `ajuda` | Mostra os comandos |
 | `sair` | `sair` | Sai do cliente |
 
 - **Linha e coluna vão de 0 a 8** (casa) e, para cerca, a **base vai de 0 a 7**.
-- Também dá para **pular** sobre um adversário: `mover cima` (ou a direção) quando ele estiver na casa vizinha.
-- Se a jogada for inválida, aparece `[ERRO DE JOGADA] ...` e é a sua vez de novo.
+- `h` = cerca **abaixo** das casas (l,c) e (l,c+1); `v` = cerca **à direita** das casas (l,c) e (l+1,c).
+- Na sua vez o console mostra a lista de **movimentos válidos** — basta escolher um deles.
+- Também dá para **pular** sobre um adversário: `mover cima` (ou a direção) quando ele estiver na casa vizinha. Se atrás dele houver cerca, borda ou outro peão, o pulo é **diagonal**: use `mover <linha> <coluna>`.
+- Se a jogada for inválida, aparece `[JOGADA INVÁLIDA] ...` e continua sendo a sua vez.
 
 ## Passo 1.4 — Exemplo de primeira jogada
 
@@ -114,7 +117,7 @@ Quando **for a sua vez**, o console mostra `Sua vez (Jogador X). Comando:` e exi
 | Jogador 3 | `(4,8)` | chegar na **coluna 0** (esquerda) |
 | Jogador 4 | `(4,0)` | chegar na **coluna 8** (direita) |
 
-Cada jogador começa com **10 cercas**.
+Cada jogador começa com **5 cercas** (regra oficial do Quoridor para 4 jogadores: as 20 cercas do jogo são divididas entre os 4).
 
 Exemplo: se você é o **Jogador 1** (em `(8,4)`), digite `mover cima` para ir a `(7,4)`.
 
@@ -163,7 +166,7 @@ java -cp target/classes client.ClientMain --gui --modo auto --nome Bot3
 java -cp target/classes client.ClientMain --gui --modo auto --nome Bot4
 ```
 
-Abrirão **4 janelas** exibindo a mesma partida em tempo real. Os bots jogam em um ritmo lento (~1 jogada/2s, partida de ~1 min) para você acompanhar cada jogada, cada peão e cada cerca colorida. Ao final, uma janela avisa o vencedor.
+Abrirão **4 janelas** exibindo a mesma partida em tempo real. Os bots jogam em um ritmo lento (~1 jogada a cada 1,5 s) para você acompanhar cada jogada, cada peão e cada cerca colorida. Ao final, uma janela avisa o vencedor e o tabuleiro final continua na tela até você fechar.
 
 ## Passo 2.3 — MODO MANUAL (você joga por cliques)
 
@@ -217,9 +220,11 @@ $env:MAVEN_OPTS="-Xmx512m"; mvn test
 ```
 
 A suíte cobre:
-- **Unitários da engine** (movimento, pulo, cercas, caminho garantido, vitória, turnos) + **autoria das cercas**.
+- **Unitários da engine** (movimento, pulos, cercas, cruzamento, caminho garantido, 5 cercas por jogador, vitória, turnos, desconexão/W.O.).
+- **Servidor** (sessão com token — ninguém joga no lugar de outro —, queda detectada por ping, W.O.).
+- **Bot e console** (estratégia do bot, partidas simuladas até o fim, interpretação de comandos).
 - **SemSocketTest**: garante que nenhum arquivo usa `java.net.Socket` (requisito da disciplina — só RMI).
-- **E2E completo**: sobe 1 servidor + 4 bots em processos separados e joga uma partida inteira até alguém vencer.
+- **E2E completo**: sobe 1 servidor + 4 bots em processos separados e joga uma partida inteira até alguém vencer; e outra em que um cliente é derrubado no meio e a partida continua.
 - **Testes da GUI** (geometria, cliques, painel, status).
 
 Deve terminar com `BUILD SUCCESS` e sem falhas.
@@ -234,8 +239,11 @@ Deve terminar com `BUILD SUCCESS` e sem falhas.
 | `Port already in use: 1099` / `ExportException` | Sobrou um servidor rodando | Mate o processo na porta 1099 (ver abaixo) e rode de novo |
 | `java` não é reconhecido | Java fora do PATH | Instale o JDK 17+ (Temurin) e ajuste o PATH |
 | `OutOfMemoryError` no build | RAM baixa | Use `MAVEN_OPTS="-Xmx512m"` sempre |
-| `Não é a vez do jogador X` | Você tentou jogar fora da sua vez | Espere o console mostrar `<< VEZ` na sua linha |
-| Cerca recusada | Cerca sobrepõe outra ou **bloquearia o caminho de alguém** (regra do BFS) | Escolha outra posição/orientação |
+| `Não é a sua vez: agora joga o Jogador X` | Você tentou jogar fora da sua vez | Espere o console mostrar `<< VEZ` na sua linha |
+| Cerca recusada | Cerca sobrepõe/cruza outra ou **bloquearia o caminho de alguém** (regra do BFS) | Escolha outra posição/orientação |
+| `Você não possui mais cercas` | Já usou as 5 cercas | Só resta mover o peão |
+| `Sala cheia` | Já há 4 jogadores na partida | Reinicie o servidor para uma nova partida |
+| Um jogador fechou a janela | Queda detectada pelo servidor (ping) | Nada a fazer: a vez dele é pulada; se sobrar 1, ele vence por W.O. |
 | Partida não começa | Menos de 4 clientes conectados | Abra exatamente **4 jogadores**, um por terminal |
 
 ### Matar um servidor preso na porta 1099 (PowerShell)

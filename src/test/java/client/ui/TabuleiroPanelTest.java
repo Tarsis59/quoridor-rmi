@@ -34,7 +34,7 @@ class TabuleiroPanelTest {
 
     private EstadoJogo estadoJ1() {
         Posicao[] pos = { new Posicao(8, 4), new Posicao(0, 4), new Posicao(4, 8), new Posicao(4, 0) };
-        return new EstadoJogo(pos, List.of(), new int[0], new int[]{10, 10, 10, 10},
+        return new EstadoJogo(pos, List.of(), new int[0], new int[]{5, 5, 5, 5},
                 1, EstadoJogo.Status.EM_ANDAMENTO, 0, new String[]{"Ana", "Bob", "Cid", "Duda"});
     }
 
@@ -75,5 +75,33 @@ class TabuleiroPanelTest {
                 0, c.x, Geometria.MARGEM + 3 * Geometria.CELULA, 1, false, MouseEvent.BUTTON1);
         panel.getMouseListeners()[0].mouseClicked(ev);
         assertEquals(List.of(alvo), cercas);
+    }
+
+    @Test
+    void cliqueForaDaVezNaoEnviaJogada() {
+        panel.setMeuId(2); // o estado diz que é a vez do J1
+        panel.setEstado(estadoJ1());
+        clique(1, 4);
+        assertTrue(movidos.isEmpty());
+        assertEquals(1, avisos.size());
+        assertTrue(avisos.get(0).contains("Aguarde sua vez"));
+    }
+
+    @Test
+    void painelNaoInterativoIgnoraCliques() {
+        panel.setMeuId(1);
+        panel.setEstado(estadoJ1());
+        panel.setInterativo(false);
+        clique(7, 4);
+        assertTrue(movidos.isEmpty());
+        assertTrue(avisos.isEmpty());
+    }
+
+    @Test
+    void mudarModoAvisaOuvinte() {
+        List<TabuleiroPanel.Modo> modos = new ArrayList<>();
+        panel.setAoMudarModo(modos::add);
+        panel.setModo(TabuleiroPanel.Modo.CERCA_V);
+        assertEquals(List.of(TabuleiroPanel.Modo.CERCA_V), modos);
     }
 }

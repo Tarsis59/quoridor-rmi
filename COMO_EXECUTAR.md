@@ -26,17 +26,18 @@ Abra um terminal **na pasta do projeto** (`PROJETO JOGO SD`) e rode:
 
 **Git Bash (ou terminal Unix):**
 ```bash
-MAVEN_OPTS="-Xmx512m" mvn -q clean package -Dmaven.test.skip=true
+MAVEN_OPTS="-Xmx512m" mvn -q clean package "-Dmaven.test.skip=true"
 ```
 
 **PowerShell (Windows):**
 ```powershell
-$env:MAVEN_OPTS="-Xmx512m"; mvn -q clean package -Dmaven.test.skip=true
+$env:MAVEN_OPTS="-Xmx512m"; mvn -q clean package "-Dmaven.test.skip=true"
 ```
 
 O que acontece:
 - Compila todo o código em `target/classes` (é o que o jogo usa).
-- `-Dmaven.test.skip=true` **pula os testes** — mais rápido para só jogar.
+- `"-Dmaven.test.skip=true"` **pula os testes** — mais rápido para só jogar. **Mantenha as aspas**: no PowerShell, sem elas o argumento é quebrado no ponto e o Maven falha com `Unknown lifecycle phase ".test.skip=true"`.
+- A linha `[warning][cds] The shared archive file was created by a different version...` é só um aviso da JVM (cache de inicialização) e **não afeta** o build nem o jogo — pode ignorar.
 - `MAVEN_OPTS="-Xmx512m"` evita erro de memória nesta máquina.
 
 Ao terminar, deve aparecer **`BUILD SUCCESS`** (ou nenhum erro). Se aparecer `OutOfMemoryError`, é porque faltou o `MAVEN_OPTS`.
@@ -237,6 +238,8 @@ Deve terminar com `BUILD SUCCESS` e sem falhas.
 |---------|-------|---------|
 | `[CLIENTE] Servidor não encontrado...` | Servidor não está de pé ainda, ou porta errada | Suba o **servidor primeiro**; confira `--porta` |
 | `Port already in use: 1099` / `ExportException` | Sobrou um servidor rodando | Mate o processo na porta 1099 (ver abaixo) e rode de novo |
+| `Unknown lifecycle phase ".test.skip=true"` | PowerShell quebrou o `-Dmaven.test.skip=true` sem aspas | Escreva com aspas: `mvn -q clean package "-Dmaven.test.skip=true"` |
+| `[warning][cds] The shared archive file...` | Aviso inofensivo da JVM | Ignore — não é erro |
 | `java` não é reconhecido | Java fora do PATH | Instale o JDK 17+ (Temurin) e ajuste o PATH |
 | `OutOfMemoryError` no build | RAM baixa | Use `MAVEN_OPTS="-Xmx512m"` sempre |
 | `Não é a sua vez: agora joga o Jogador X` | Você tentou jogar fora da sua vez | Espere o console mostrar `<< VEZ` na sua linha |
@@ -261,7 +264,7 @@ Ou, se souber o PID: `taskkill /F /PID <numero>`.
 
 ```bash
 # 1. Compilar
-$env:MAVEN_OPTS="-Xmx512m"; mvn -q clean package -Dmaven.test.skip=true   # (PowerShell)
+$env:MAVEN_OPTS="-Xmx512m"; mvn -q clean package "-Dmaven.test.skip=true"   # (PowerShell)
 
 # 2. Servidor (Terminal 1)
 java -cp target/classes server.ServerMain

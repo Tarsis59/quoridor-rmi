@@ -25,7 +25,7 @@ MAVEN_OPTS="-Xmx512m" mvn clean package
 ```
 
 > No PowerShell: `$env:MAVEN_OPTS="-Xmx512m"; mvn clean package`
-> Para compilar **sem rodar os testes** (mais rápido, ideal só para jogar): adicione `-Dmaven.test.skip=true` no fim.
+> Para compilar **sem rodar os testes** (mais rápido, ideal só para jogar): adicione `"-Dmaven.test.skip=true"` no fim — **com aspas**: sem elas o PowerShell quebra o argumento no ponto e o Maven responde `Unknown lifecycle phase ".test.skip=true"`.
 
 O artefato compilado fica em `target/classes` (sem dependências externas além da JDK).
 

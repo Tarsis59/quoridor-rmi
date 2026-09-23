@@ -32,4 +32,14 @@ class GraphicUITest {
         g.novoEstado(e);
         assertSame(e, g.getEstadoAtual());
     }
+
+    @Test
+    void historicoRegistraOInicioDaPartida() throws Exception {
+        GraphicUI g = new GraphicUI("manual");
+        g.setSessao(new common.Sessao(1, "token"));
+        g.novoEstado(estado());
+        javax.swing.SwingUtilities.invokeAndWait(() -> { }); // espera a EDT aplicar o estado
+        assertTrue(g.textosHistorico().contains("A partida começou!"));
+        assertTrue(g.status().getTexto().startsWith("Sua vez!"), g.status().getTexto());
+    }
 }

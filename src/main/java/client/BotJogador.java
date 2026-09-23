@@ -97,7 +97,10 @@ public class BotJogador {
         }
         if (alvo < 0 || (distAlvo >= minhaDist && distAlvo > 2)) return null;
 
-        Cerca escolhida = null;
+        // Economia de cercas: longe do fim só vale uma cerca que atrase bastante (>= 2 passos);
+        // perto do fim (adversário a <= 3 passos) qualquer atraso já compensa.
+        int ganhoMinimo = distAlvo <= 3 ? 1 : 2;
+        List<Cerca> melhores = new ArrayList<>();
         int melhorGanho = 0;
         for (Cerca c : tabuleiro.cercasPossiveis()) {
             Tabuleiro sim = tabuleiro.copiar();
@@ -106,9 +109,11 @@ public class BotJogador {
                     - (sim.distanciaMinimaAteAlvo(id) - minhaDist);
             if (ganho > melhorGanho) {
                 melhorGanho = ganho;
-                escolhida = c;
+                melhores.clear();
             }
+            if (ganho == melhorGanho && ganho > 0) melhores.add(c);
         }
-        return escolhida;
+        if (melhorGanho < ganhoMinimo || melhores.isEmpty()) return null;
+        return melhores.get(aleatorio.nextInt(melhores.size()));
     }
 }

@@ -167,7 +167,7 @@ java -cp target/classes client.ClientMain --gui --modo auto --nome Bot3
 java -cp target/classes client.ClientMain --gui --modo auto --nome Bot4
 ```
 
-Abrirão **4 janelas** exibindo a mesma partida em tempo real. Os bots jogam em um ritmo lento (~1 jogada a cada 1,5 s) para você acompanhar cada jogada, cada peão e cada cerca colorida. Ao final, uma janela avisa o vencedor e o tabuleiro final continua na tela até você fechar.
+Abrirão **4 janelas** exibindo a mesma partida em tempo real. Os bots jogam em um ritmo lento (~1 jogada por segundo) para você acompanhar cada jogada, cada peão e cada cerca colorida. Ao final, um aviso sobre o tabuleiro anuncia o vencedor e a partida final continua na tela até você fechar.
 
 ## Passo 2.3 — MODO MANUAL (você joga por cliques)
 
@@ -178,7 +178,7 @@ java -cp target/classes client.ClientMain --gui --modo manual --nome Jogador1
 ```
 
 **Como jogar por cliques:**
-1. Quando **for a sua vez**, as **casas destino legais** ficam destacadas — basta clicar em uma para mover.
+1. Quando **for a sua vez**, as casas para onde você pode ir ganham um **ponto na sua cor** — basta clicar em uma para mover.
 2. A barra de ferramentas alterna entre **Mover**, **Cerca H** e **Cerca V**.
 3. Movendo o mouse sobre o tabuleiro, aparece um **preview da cerca** (verde = válida, vermelho = inválida).
 4. **Clique direito** alterna a orientação H ↔ V rapidamente.
@@ -188,7 +188,9 @@ java -cp target/classes client.ClientMain --gui --modo manual --nome Jogador1
 
 - **Peões**: Jogador 1 = vermelho, Jogador 2 = azul, Jogador 3 = verde, Jogador 4 = âmbar.
 - **Cercas coloridas**: cada cerca no tabuleiro tem a **cor do jogador que a colocou** — dá para saber quem montou cada barreira.
-- **Painel lateral (JOGADORES)**: cada linha tem uma **barra vertical na cor do jogador**, além de posição, cercas restantes, badge `VEZ` (dourado) e o realce azul "você".
+- **Painel lateral (JOGADORES)**: um cartão por jogador com avatar na cor dele, passos que faltam até a meta, as **5 cercas em barrinhas** (cheias = ainda disponíveis) e os selos `VEZ` (dourado), `VENCEU` e `SAIU`. O seu cartão tem fundo azulado.
+- **Histórico**: as últimas jogadas (quem andou, quem pôs cerca, quem saiu), cada uma com a cor do jogador.
+- **Atalhos**: `M` mover, `H`/`V` cerca horizontal/vertical, `R` ou botão direito gira a cerca, `Esc` volta a mover.
 - O topo da janela mostra **qual jogador você é** e o **modo** (Manual/Automático).
 
 ---

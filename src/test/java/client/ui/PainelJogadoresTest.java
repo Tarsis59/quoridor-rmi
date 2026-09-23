@@ -24,5 +24,8 @@ class PainelJogadoresTest {
         assertEquals("Bob (você)", p.nome(2).getText());
         assertTrue(p.meta(3).getText().contains("1 cerca"));
         assertTrue(p.meta(4).getText().contains("0 cercas"));
+        assertTrue(p.meta(1).getText().startsWith("faltam 8 passos"), p.meta(1).getText());
+        assertEquals(1, p.cercasDesenhadas(3), "inventário desenhado acompanha o estado");
+        assertEquals(5, p.cercasDesenhadas(1));
     }
 }

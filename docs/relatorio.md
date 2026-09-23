@@ -89,7 +89,7 @@ As regras implementadas:
 - `ClientCallbackImpl extends UnicastRemoteObject implements ClientCallback` — recebe os snapshots e delega para a `UI` local; responde ao `ping` do servidor.
 - `CaixaEstado` — guarda o último estado recebido e acorda (wait/notify) quem espera por um novo, sem *polling*.
 - `ConsoleUI` — desenha o tabuleiro 9×9 em caracteres, mostra os movimentos válidos na sua vez, lê comandos (`mover`, `cerca`, `tabuleiro`, `ajuda`, `sair`) e exibe mensagens claras para `JogadaInvalidaException`.
-- `BotJogador` — IA usada na validação E2E e no modo demo (`--bot`): anda pelo menor caminho (BFS) e, quando um adversário está mais perto da vitória, coloca a cerca de maior ganho líquido (atraso do adversário − atraso próprio).
+- `BotJogador` — IA usada na validação E2E e no modo demo (`--bot`): anda pelo menor caminho (BFS) e, quando um adversário está mais perto da vitória, coloca a cerca de maior ganho líquido (atraso do adversário − atraso próprio). Longe do fim só gasta cerca com ganho de 2 passos ou mais; perto do fim, qualquer atraso já compensa.
 - `ClientMain` — faz `lookup`, registra o callback e entra no loop de UI (ou no loop do bot, que age no máximo uma vez por estado recebido).
 
 ## 5. Protocolo RMI e fluxo de dados
@@ -120,12 +120,14 @@ O cliente ganhou uma **interface gráfica em Java Swing** (pacote `client.ui`) q
 | Classe | Responsabilidade |
 |--------|------------------|
 | `GraphicUI` | Implementa `JogadorUI`. Janela (`JFrame`), agrega os painéis, orquestra modo/estado e converte callbacks para a EDT via `SwingUtilities.invokeLater`. |
-| `TabuleiroPanel` | `JPanel` com `paintComponent`: desenha o tabuleiro 9×9 (casas, peões, cercas, coordenadas, destaque de vez) e trata cliques + preview de cerca. |
-| `PainelJogadores` | Lista os 4 jogadores (cor, posição, cercas restantes, badge `VEZ`, realce "você"). |
+| `TabuleiroPanel` | `JPanel` com `paintComponent`: desenha o tabuleiro 9×9 (casas com sulcos, faixas de meta, pontos nas jogadas possíveis, última jogada, cercas, peões, coordenadas, avisos de espera/vitória) e trata cliques + preview de cerca. |
+| `PainelJogadores` | Cartões dos 4 jogadores (avatar, passos até a meta, 5 cercas em barrinhas, selos `VEZ`/`VENCEU`/`SAIU`, destaque "você"). |
+| `PainelHistorico` / `Historico` | Lista das últimas jogadas; `Historico` é uma função pura que descreve a diferença entre dois `EstadoJogo`. |
+| `BotaoModo` | Botões Mover / Cerca H / Cerca V desenhados no tema, com a tecla de atalho. |
 | `BarraStatus` | Mensagens de status, dicas e erros. |
 | `DialogoModo` | Diálogo inicial: escolha entre **Manual** e **Automático**. |
 | `Geometria` | Conversão pura pixel ↔ casa/aresta, testável sem abrir janela. |
-| `EstiloUI` | Tema "Moderno Plano" centralizado (cores, fontes, medidas). |
+| `EstiloUI` | Tema escuro "Noite" centralizado (cores, fontes, medidas). |
 
 ### 7.2 Modos de uso
 
@@ -134,9 +136,11 @@ O cliente ganhou uma **interface gráfica em Java Swing** (pacote `client.ui`) q
 
 O modo é escolhido por `--modo manual|auto` ou, na ausência da flag, por um diálogo na abertura.
 
-### 7.3 Decisões visuais (tema "Moderno Plano")
+### 7.3 Decisões visuais (tema "Noite")
 
-Paleta *flat* centralizada em `EstiloUI`: fundo `#eef1f6`, topo escuro `#2b3442` com título dourado `#f7c948`, peões vermelho/azul/verde/âmbar, badge de vez dourado e realce azul para o jogador local. Cantos arredondados em casas, peças e painéis — sem dependências externas (apenas `java.desktop` da JDK, mantendo o jar único).
+Paleta escura centralizada em `EstiloUI` (fundo `#0B1220`, cartões `#172239`, destaque dourado `#F5C451`), para que as quatro cores dos jogadores (vermelho, azul, verde e âmbar) sejam o que salta aos olhos. Casas com leve degradê, sulcos onde as cercas encaixam (como no tabuleiro físico), peões com gradiente radial e sombra, e faixas coloridas nas bordas indicando a meta de cada um. Tudo é desenhado em Java2D, sem dependências externas (apenas `java.desktop` da JDK). A fonte é a Segoe UI no Windows, com alternativas em outros sistemas.
+
+O clique age no *mouse pressed* e não no *mouse clicked*: assim um clique com o mouse tremendo um pixel não se perde. Atalhos de teclado (`M`, `H`, `V`, `R`, `Esc`) agilizam o modo manual.
 
 Para facilitar a identificação visual, cada **cerca é pintada com a cor do jogador que a colocou** (a autoria de cada cerca é carregada no próprio `EstadoJogo`, numa lista paralela de donos preenchida pelo `Partida`), e cada linha do painel lateral de jogadores tem uma **barra vertical na cor do respectivo jogador**.
 
@@ -144,7 +148,7 @@ Para facilitar a identificação visual, cada **cerca é pintada com a cor do jo
 
 - **Testes JUnit** (pacote `client.ui`): `GeometriaTest` (pixel ↔ casa/aresta), `TabuleiroPanelTest` (clique → `Posicao`/`Cerca` via eventos sintéticos), `PainelJogadoresTest`, `BarraStatusTest` e `GraphicUITest` (construção e troca de estado sem abrir janela).
 - No modo manual, as casas legais só são destacadas **na vez do próprio jogador**, cliques fora da vez geram aviso sem chamar o servidor, e as chamadas RMI saem da thread da interface (a janela nunca congela esperando a rede). No modo automático o tabuleiro fica só de exibição.
-- Cada borda de chegada é pintada com o tom claro da cor do jogador que precisa alcançá-la; o peão de quem saiu fica esmaecido e o painel mostra "SAIU". A captura está em `docs/img/quoridor-gui.png`.
+- O peão de quem saiu fica esmaecido e o cartão mostra "SAIU"; ao fim, um aviso sobre o tabuleiro anuncia o vencedor. As capturas estão em `docs/img/quoridor-gui.png` e `docs/img/quoridor-gui-vitoria.png`.
 
 ## 8. Testes e validação
 
@@ -154,6 +158,7 @@ Para facilitar a identificação visual, cada **cerca é pintada com a cor do jo
 - `PartidaTest` (13 casos): jogada fora da vez, turnos em ciclo, vitória, movimento inválido, estado inicial com **5 cercas**, 6ª cerca recusada, vez pulada de desconectado, W.O., entradas nulas, nome sanitizado.
 - `GameServerImplTest` (10 casos): tokens distintos, 5º jogador recusado, **jogar no lugar de outro é recusado**, broadcast a todos, estado de espera, queda detectada por ping, W.O., jogador que caiu não volta a jogar, fim avisado uma única vez e após o estado final.
 - `BotJogadorTest` (5 casos) e `ConsoleUITest` (2 casos): estratégia do bot, 5 partidas completas simuladas terminando sempre, interpretação de comandos.
+- `ArbitroIndependenteTest`: as regras reescritas do zero, direto da lista de cercas, sem usar a engine. 25 partidas inteiras de bots são conferidas jogada a jogada (movimentos e cercas legais idênticos aos da engine, toda jogada aceita é legal, só o jogador da vez se move, vencedor realmente na meta). Numa auditoria maior, com 300 partidas, houve **0 divergências**, e após o ajuste da estratégia as vitórias ficaram equilibradas entre os 4 lugares (23% / 17% / 25% / 35%).
 
 ### SemSocketTest
 

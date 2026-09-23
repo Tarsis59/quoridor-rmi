@@ -14,7 +14,7 @@ import java.rmi.registry.Registry;
 public class ClientMain {
 
     /** No modo automático com GUI, pausa antes de cada jogada do bot para dar para acompanhar. */
-    private static final long ATRASO_JOGADA_GUI_MS = 1500;
+    private static final long ATRASO_JOGADA_GUI_MS = 1000;
 
     public static void main(String[] args) throws Exception {
         String nome = "Jogador";

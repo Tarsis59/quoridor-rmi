@@ -108,11 +108,20 @@ java -cp target/classes client.ClientMain --gui --modo auto --nome Bot4
 java -cp target/classes client.ClientMain --nome Bot1 --bot
 ```
 
-Cada bot decide sua jogada automaticamente com o mesmo motor de regras do servidor: anda pelo menor caminho até a meta e, quando um adversário está mais perto de vencer, coloca a cerca que mais atrasa esse adversário sem atrasar a si mesmo.
+Cada bot decide sua jogada automaticamente com o mesmo motor de regras do servidor: anda pelo menor caminho até a meta e, quando um adversário está mais perto de vencer, coloca a cerca que mais atrasa esse adversário sem atrasar a si mesmo. Longe do fim ele economiza cercas (só usa uma se ela atrasar o rival em 2 passos ou mais), e empates são sorteados, para as partidas variarem.
 
 ## Interface gráfica (Swing)
 
-O cliente também possui uma **interface gráfica em Java Swing** com visual "Moderno Plano" — tabuleiro 9×9 com casas, peões coloridos, cercas e destaque da vez, painel lateral de jogadores e barra de status. As **cercas são coloridas pela cor do jogador que as colocou** e cada linha do painel lateral tem uma **barra na cor do jogador**, para identificar rapidamente quem montou cada barreira e quem é quem. Para abri-la, use a flag `--gui`:
+O cliente também possui uma **interface gráfica em Java Swing** com tema escuro "Noite", toda desenhada em Java2D (sem bibliotecas externas):
+
+- **Tabuleiro** com sulcos entre as casas (onde as cercas encaixam) e uma **faixa colorida em cada borda de chegada**, na cor do jogador que precisa alcançá-la.
+- **Peões com volume e sombra**; o da vez ganha um anel dourado e o seu tem um aro branco. Quem sai da partida fica esmaecido.
+- **Cercas na cor de quem as colocou**, com sombra; a mais recente brilha. Um contorno tracejado marca de onde o último peão saiu.
+- **Cartões dos jogadores** com avatar, passos que faltam até a meta, as **5 cercas em barrinhas** (cheias = disponíveis) e selos `VEZ` / `VENCEU` / `SAIU`.
+- **Histórico das jogadas** (quem moveu, quem pôs cerca, quem saiu), na cor de cada jogador.
+- **Avisos sobre o tabuleiro**: "Aguardando jogadores (n de 4)" e "Você venceu!" / "Fulano venceu!".
+
+Para abri-la, use a flag `--gui`:
 
 ```bash
 java -cp target/classes client.ClientMain --gui --nome Jogador1
@@ -120,11 +129,20 @@ java -cp target/classes client.ClientMain --gui --nome Jogador1
 
 ### Modo Manual (por cliques)
 
-Quando for a sua vez (e só nela), as **casas destino legais** são destacadas em verde no tabuleiro; basta clicar para mover o peão. A barra de ferramentas alterna entre **Mover**, **Cerca H** e **Cerca V** — ao mover o mouse sobre o tabuleiro, um **preview** da cerca mostra a aresta candidata (verde = válida, vermelho = inválida), e o **clique direito** alterna a orientação H ↔ V rapidamente. A validação final é sempre do servidor; erros aparecem na barra de status.
+Quando for a sua vez (e só nela), as **casas para onde você pode ir** ganham um ponto na sua cor (que cresce ao passar o mouse); basta clicar para mover. A barra de ferramentas alterna entre **Mover**, **Cerca H** e **Cerca V** — ao mover o mouse sobre o tabuleiro, um **preview** da cerca mostra a posição candidata (verde = válida, vermelho = inválida).
+
+| Atalho | Ação |
+|--------|------|
+| `M` | Modo mover |
+| `H` / `V` | Cerca horizontal / vertical |
+| `R` ou botão direito | Gira a cerca (H ↔ V) |
+| `Esc` | Volta para o modo mover |
+
+A validação final é sempre do servidor; erros aparecem em vermelho na barra de status.
 
 ### Modo Automático (demonstração)
 
-A janela apenas **exibe** a partida evoluindo sozinha em tempo real, com os 4 processos jogando como bots em um ritmo lento (~1 jogada a cada 1,5 s) — ideal para demonstrar o jogo completo sem intervenção. Ao final a janela continua aberta mostrando o resultado:
+A janela apenas **exibe** a partida evoluindo sozinha em tempo real, com os 4 processos jogando como bots em um ritmo lento (~1 jogada por segundo) — ideal para demonstrar o jogo completo sem intervenção. Ao final a janela continua aberta mostrando o resultado:
 
 ```bash
 java -cp target/classes client.ClientMain --gui --modo auto --nome Bot1
@@ -137,7 +155,9 @@ Se `--modo` não for informado, um diálogo pergunta entre **Manual** e **Autom�
 
 ![Interface gráfica do Quoridor](docs/img/quoridor-gui.png)
 
-> Na imagem: cada borda de chegada tem o tom claro da cor do jogador que precisa alcançá-la; a vertical verde passa entre duas horizontais em linha (permitido, pois não se cruzam); o peão do jogador que saiu fica esmaecido.
+> Na imagem: é a vez da Ana (Jogador 1, vermelho) — os pontos vermelhos são as casas para onde ela pode ir. A cerca vertical verde passa entre duas horizontais em linha (permitido, pois não se cruzam); o contorno tracejado mostra de onde a Carla acabou de sair; o Davi saiu da partida e aparece esmaecido.
+
+![Fim de partida](docs/img/quoridor-gui-vitoria.png)
 
 ## Testes
 
@@ -151,10 +171,11 @@ mvn test
 | `PartidaTest` (13) | Turnos, jogada fora da vez, vitória, movimento inválido, **5 cercas por jogador** (6ª recusada), vez pulada de desconectado, vitória por W.O., entradas nulas, nome sanitizado |
 | `GameServerImplTest` (10) | Registro de 4 com tokens distintos, 5º recusado, **jogar no lugar de outro é recusado**, broadcast para todos, queda detectada por ping, W.O., fim avisado uma vez só |
 | `BotJogadorTest` (5) | Movimento pelo menor caminho, cerca contra quem está perto de vencer, 5 partidas completas simuladas sempre terminam |
+| `ArbitroIndependenteTest` (1) | **Árbitro escrito do zero** (sem usar a engine) confere 25 partidas inteiras de bots jogada a jogada: movimentos e cercas legais iguais aos da engine, toda jogada aceita é legal, só o jogador da vez se move, vencedor na meta |
 | `ConsoleUITest` (2) | Interpretação de comandos (cerca só com `h`/`v`, direção que pula peão) |
 | `SemSocketTest` (1) | Varre `src/main/java` e garante que **nenhum** arquivo usa `java.net.Socket`/`new Socket`/`ServerSocket` |
 | `E2ETest` (2) | 1 servidor + 4 clientes bot em **processos separados**: partida completa até o vencedor (todos recebem o fim via callback) e partida em que um cliente é derrubado no meio e o jogo continua |
-| `ui/*` (16) | Geometria, cliques do `TabuleiroPanel` (inclusive fora da vez), `PainelJogadores`, `BarraStatus` e `GraphicUI` |
+| `ui/*` (24) | Geometria, cliques do `TabuleiroPanel` (inclusive fora da vez e sem cercas), desenho em todos os estados, cartões dos jogadores, histórico de jogadas, `BarraStatus` e `GraphicUI` |
 
 ## Estrutura
 
@@ -164,7 +185,8 @@ src/main/java/
 ├── engine/   regras do jogo, puras e sem RMI (Tabuleiro, Partida)
 ├── server/   GameServerImpl (lógica RMI + callbacks), ServerMain (registry embutido)
 └── client/   ClientCallbackImpl, ConsoleUI, BotJogador, CaixaEstado, ClientMain
-    └── ui/   interface gráfica Swing (GraphicUI, TabuleiroPanel, PainelJogadores, BarraStatus, DialogoModo, Geometria, EstiloUI)
+    └── ui/   interface gráfica Swing (GraphicUI, TabuleiroPanel, PainelJogadores, PainelHistorico, Historico,
+              BotaoModo, BarraStatus, DialogoModo, Geometria, EstiloUI)
 src/test/java/
 ├── engine/   testes JUnit da engine
 ├── server/   testes do servidor (sessão, desconexão, W.O.)
